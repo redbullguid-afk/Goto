@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+
+<html lang="vi">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+  <title>Mờ Tê Chat - Phòng Chat Trực Tuyến & Game Boss Pro</title>
+
+  
+
+  <!-- Tailwind CSS & FontAwesome -->
+
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  
+
+  <!-- Firebase SDKs (Compat Version - Khắc phục 100% lỗi khởi tạo & Kết nối ổn định) -->
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+  <script>
+
+    // Cấu hình Firebase chuẩn
+
+    var firebaseConfig = {
+
+      apiKey: "AIzaSyDvA9gpHY-e4S3qYXXQQHPc2SxGdwvm4AU",
+
+      authDomain: "webchat-4ad28.firebaseapp.com",
+
+      databaseURL: "https://webchat-4ad28-default-rtdb.firebaseio.com",
+
+      projectId: "webchat-4ad28",
+
+      storageBucket: "webchat-4ad28.firebasestorage .app",
+
+      messagingSenderId: "372841627714",
+
+      appId: "1:372841627714:web:2c1035a9198c179647addb",
+
+      measurementId: "G-RX9TBCX9V6"
+
+    };
+
+    // Khởi tạo Firebase
+
+    if (!firebase.apps.length) {
+
+      firebase.initializeApp(firebaseConfig);
+
+    }
+
+    
+
+    var db = firebase.database();
+
+    window.db = db;
+
+    // Helper bọc API Firebase tương thích chuẩn xác 100% cho toàn bộ hệ thống
+
+    window.dbRefs = { 
+
+      ref: function(d, path) { return (d || db).ref(path); },
+
+      set: function(r, val) { return r.set(val); },
+
+      get: function(r) { return r.get ? r.get() : r.once('value'); },
+
+      remove: function(r) { return r.remove(); },
+
+      update: function(r, val) { return r.update(val); },
+
+      onValue: function(r, cb) { return r.on('value', cb); },
+
+      push: function(r) { return r.push(); },
+
+      serverTimestamp: function() { return firebase.database.ServerValue.TIMESTAMP; },
+
+      query: function(r) { 
+
+        var target = r;
+
+        for (var i = 1; i < arguments.length; i++) {
+
+          if (typeof arguments[i] === 'function') {
+
+            target = arguments[i](target);
+
+          }
+
+        }
+
+        return target; 
+
+      },
+
+      limitToLast: function(r, num) { 
+
+        // Hỗ trợ cả 2 dạng: limitToLast(100) hoặc limitToLast(ref, 100)
+
+        if (typeof num === 'undefined' && typeof r === 'number') {
+
+          var limitCount = r;
+
+          return function(refOrQuery) {
+
+            return (refOrQuery && refOrQuery.limitToLast) ? refOrQuery.limitToLast(limitCount) : refOrQuery;
+
+          };
+
+        }
+
+        return (r && r.limitToLast) ? r.limitToLast(num) : r; 
+
+      },
+
+      onDisconnect: function(r) { return r.onDisconnect(); }
+
+    };
+
+  </script>
+
+  <style>
+
+    .custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+
+    .custom-scroll::-webkit-scrollbar-track { background: #090d16; }
+
+    .custom-scroll::-webkit-scrollbar-thumb { background: #1f293d; border-radius: 4px; }
+
+    
+
+    #chat-input, #private-chat-input {
+
+      resize: none;
+
+      max-height: 100px;
+
+    }
+
+    @keyframes fadeInScale {
+
+      0% { opacity: 0; transform: scale(0.95); }
+
+      100% { opacity: 1; transform: scale(1); }
+
+    }
+
+    .animate-modal { animation: fadeInScale 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+    @keyframes discSpin {
+
+      0% { transform: rotate(0deg); }
+
+      100% { transform: rotate(360deg); }
+
+    }
+
+    .animate-disc-spin { animation: discSpin 4s linear infinite; }
+
+    .music-carousel-item {
+
+      transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+
+    }
+
+  </style>
+
+</head>
+
+<body class="bg-gray-950 text-gray-100 font-sans antialiased h-screen flex flex-col justify-between overflow-hidden select-none text-xs relative">
+
+  <!-- CHỮ KÝ TÁC GIẢ -->
+
+  <div class="fixed bottom-1 right-2 z-40 bg-gray-900/80 border border-purple-500/30 px-2 py-0.5 rounded-md backdrop-blur-sm pointer-events-none shadow-md">
+
+    <span class="text-[9px] font-bold text-purple-300 tracking-wider">Tác giả: Mờ Tê</span>
+
+  </div>
+
+  <!-- AUDIO GLOBAL & SOUND EFFECTS -->
+
+  <audio id="global-auto-audio" class="hidden"></audio>
+
+  <!-- Nút bóng nổi nhạc (Floating Music Ball) -->
+
+  <div id="floating-music-ball" class="fixed bottom-12 right-4 z-50 flex items-center justify-center cursor-move touch-none">
+
+    <button type="button" onclick="toggleMusicPlaylistModal()" class="w-10 h-10 bg-purple-600 hover:bg-purple-500 text-white rounded-full shadow-2xl border-2 border-purple-400 flex items-center justify-center transition-transform hover:scale-110 active:scale-95">
+
+      <i id="music-ball-icon" class="fa-solid fa-music text-xs"></i>
+
+    </button>
+
+  </div>
+
+  <!-- MODAL DANH SÁCH NHẠC & TRÌNH PHÁT CAROUSEL -->
+
+  <div id="playlist-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+
+    <div class="bg-gray-900 border border-purple-500/40 w-full max-w-sm rounded-2xl p-4 text-center shadow-2xl space-y-3 relative animate-modal">
+
+      <button type="button" onclick="toggleMusicPlaylistModal()" class="absolute top-2.5 right-2.5 text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-sm"></i></button>
+
+      <h3 class="text-xs font-bold text-purple-300 flex items-center justify-center gap-1.5">
+
+        <i class="fa-solid fa-compact-disc text-amber-400 animate-disc-spin"></i> 🎵 Trình Phát Nhạc Mờ Tê Chat
+
+      </h3>
+
+      
+
+      <!-- DANH SÁCH NHẠC CAROUSEL NẰM NGANG -->
+
+      <div class="relative w-full overflow-hidden bg-gray-950 p-3 rounded-2xl border border-gray-800">
+
+        <div id="music-carousel-track" class="flex items-center justify-center gap-3 transition-all duration-300 min-h-[110px]">
+
+          <p class="text-[10px] text-gray-500 italic">Chưa có bài hát nào được Admin duyệt.</p>
+
+        </div>
+
+        <button type="button" onclick="prevCarouselSong()" class="absolute left-1 top-1/2 -translate-y-1/2 w-6 h-6 bg-gray-900/90 hover:bg-purple-600 text-white rounded-full border border-gray-700 flex items-center justify-center text-[10px] shadow">
+
+          <i class="fa-solid fa-chevron-left"></i>
+
+        </button>
+
+        <button type="button" onclick="nextCarouselSong()" class="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 bg-gray-900/90 hover:bg-purple-600 text-white rounded-full border border-gray-700 flex items-center justify-center text-[10px] shadow">
+
+          <i class="fa-solid fa-chevron-right"></i>
+
+        </button>
+
+      </div>
+
+      <!-- TRÌNH KHIỂN PHÁT NHẠC -->
+
+      <div id="player-controls-bar" class="bg-gray-950 p-2.5 rounded-xl border border-gray-800 space-y-2">
+
+        <div class="flex items-center justify-between">
+
+          <span id="now-playing-title" class="text-[10px] font-bold text-amber-400 truncate max-w-[200px]">🎵 Đang phát: Chưa chọn</span>
+
+          <span id="audio-time-display" class="text-[9px] font-mono text-gray-400">00:00 / 00:00</span>
+
+        </div>
+
+        <input type="range" id="audio-seek-slider" value="0" max="100" class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-purple-500" oninput="seekAudioPosition(this.value)">
+
+        <div class="flex items-center justify-center gap-3">
+
+          <button type="button" onclick="playNextRandomSong()" class="w-8 h-8 bg-gray-800 hover:bg-gray-700 text-purple-300 rounded-lg flex items-center justify-center text-xs" title="Phát ngẫu nhiên bài khác">
+
+            <i class="fa-solid fa-shuffle"></i>
+
+          </button>
+
+          <button type="button" onclick="toggleGlobalAudioPlay()" class="w-9 h-9 bg-purple-600 hover:bg-purple-500 text-white rounded-xl flex items-center justify-center text-sm shadow-lg">
+
+            <i id="playlist-play-icon" class="fa-solid fa-play"></i>
+
+          </button>
+
+          <button type="button" onclick="confirmPlayCarouselSong()" class="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold rounded-lg shadow">
+
+            Chuyển Bài
+
+          </button>
+
+        </div>
+
+      </div>
+
+      <button type="button" onclick="openRequestSongModal()" class="w-full py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold text-xs rounded-xl shadow transition-all active:scale-95">
+
+        <i class="fa-solid fa-cloud-arrow-up mr-1"></i> Yêu Cầu Duyệt Nhạc
+
+      </button>
+
+    </div>
+
+  </div>
+
+  <!-- MODAL YÊU CẦU DUYỆT NHẠC -->
+
+  <div id="request-song-modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+
+    <div class="bg-gray-900 border border-purple-500/40 w-full max-w-xs rounded-2xl p-4 shadow-2xl space-y-3 animate-modal">
+
+      <h3 class="text-xs font-bold text-purple-400 text-center">🎵 Yêu Cầu Duyệt Bài Hát</h3>
+
+      <div>
+
+        <label class="block text-[9px] font-bold text-gray-400 uppercase mb-1">Chọn tệp âm thanh (.mp3, .m4a)</label>
+
+        <input type="file" id="request-song-file" accept="audio/*" class="w-full text-xs text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:bg-purple-600 file:text-white cursor-pointer">
+
+      </div>
+
+      <div>
+
+        <label class="block text-[9px] font-bold text-gray-400 uppercase mb-1">Tên bài hát chính xác</label>
+
+        <input type="text" id="request-song-name" placeholder="Ghi đúng tên nếu không sẽ không duyệt..." class="w-full px-2.5 py-1.5 bg-gray-950 border border-gray-800 rounded-xl text-xs text-white">
+
+      </div>
+
+      <div class="flex gap-2 pt-1">
+
+        <button type="button" onclick="submitSongRequest()" class="flex-1 py-1.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow">Gửi Duyệt</button>
+
+        <button type="button" onclick="closeRequestSongModal()" class="py-1.5 px-3 bg-gray-800 text-gray-400 text-xs font-bold rounded-xl">Đóng</button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- MODAL DUYỆT BÀI HÁT CHO ADMIN -->
+
+  <div id="approve-music-modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+
+    <div class="bg-gray-900 border border-amber-500/40 w-full max-w-xs rounded-2xl p-4 text-center shadow-2xl space-y-3 animate-modal">
+
+      <h3 class="text-xs font-bold text-amber-400">✨ Duyệt Bài Hát Hệ Thống</h3>
+
+      <p class="text-[10px] text-gray-400">Đặt tên hiển thị cho bài hát này trong Danh sách nhạc chính:</p>
+
+      <input type="text" id="approve-song-title-input" placeholder="Nhập tên bài hát..." class="w-full px-3 py-1.5 bg-gray-950 border border-gray-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500">
+
+      <div class="flex gap-2 pt-1">
+
+        <button type="button" onclick="confirmApproveMusic()" class="flex-1 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl shadow">Xác Nhận Duyệt</button>
+
+        <button type="button" onclick="closeApproveMusicModal()" class="py-1.5 px-3 bg-gray-800 text-gray-400 text-xs font-bold rounded-xl">Hủy</button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- MODAL POPUP THÔNG BÁO CHUNG -->
+
+  <div id="app-modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+
+    <div class="bg-gray-900 border border-purple-500/40 w-full max-w-xs rounded-2xl p-4 text-center shadow-2xl space-y-3 animate-modal">
+
+      <h3 id="app-modal-title" class="text-xs font-bold text-amber-400">Thông Báo</h3>
+
+      <p id="app-modal-desc" class="text-[11px] text-gray-300 whitespace-pre-wrap leading-relaxed"></p>
+
+      <button type="button" id="app-modal-confirm-btn" onclick="closeAppModal()" class="w-full py-1.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow">Đóng</button>
+
+    </div>
+
+  </div>
+
+  <!-- MODAL REPORT BÁO XẤU -->
+
+  <div id="report-modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+
+    <div class="bg-gray-900 border border-rose-500/40 w-full max-w-xs rounded-2xl p-4 shadow-2xl space-y-3 animate-modal">
+
+      <h3 class="text-xs font-bold text-rose-400 text-center">🚨 Báo Cáo & Góp Ý Hệ Thống</h3>
+
+      <div>
+
+        <label class="block text-[9px] font-bold text-gray-400 uppercase mb-1">Loại báo cáo</label>
+
+        <select id="report-type-select" onchange="toggleReportFields()" class="w-full px-2.5 py-1.5 bg-gray-950 border border-gray-800 rounded-xl text-xs text-white">
+
+          <option value="1">1. Báo Lỗi Hệ Thống</option>
+
+          <option value="2">2. Báo Xấu User</option>
+
+          <option value="3">3. Góp Ý Phát Triển</option>
+
+        </select>
+
+      </div>
+
+      <div id="report-target-user-box" class="hidden">
+
+        <label class="block text-[9px] font-bold text-gray-400 uppercase mb-1">Tên User bị báo xấu</label>
+
+        <input type="text" id="report-target-user-input" placeholder="Ví dụ: userA" class="w-full px-2.5 py-1.5 bg-gray-950 border border-gray-800 rounded-xl text-xs text-white">
+
+      </div>
+
+      <div>
+
+        <label id="report-content-label" class="block text-[9px] font-bold text-gray-400 uppercase mb-1">Nội dung báo lỗi</label>
+
+        <textarea id="report-content-input" rows="3" placeholder="Mô tả chi tiết..." class="w-full px-2.5 py-1.5 bg-gray-950 border border-gray-800 rounded-xl text-xs text-white"></textarea>
+
+      </div>
+
+      <div class="flex gap-2 pt-1">
+
+        <button type="button" onclick="submitReportModal()" class="flex-1 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow">Gửi Báo Cáo</button>
+
+        <button type="button" onclick="closeReportModal()" class="py-1.5 px-3 bg-gray-800 text-gray-400 text-xs font-bold rounded-xl">Hủy</button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- MÀN HÌNH 1: AUTHENTICATION -->
+
+  <div id="auth-screen" class="flex-1 flex flex-col justify-center items-center px-4 py-6 overflow-y-auto">
+
+    <div class="w-full max-w-md bg-gray-900/95 border border-gray-800 rounded-2xl shadow-2xl p-6 backdrop-blur-md">
+
+      <div class="text-center mb-5">
+
+        <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-purple-600/20 text-purple-400 mb-2 border border-purple-500/30 shadow-lg">
+
+          <i class="fa-solid fa-bolt text-xl"></i>
+
+        </div>
+
+        <h1 class="text-base font-bold text-white tracking-tight">Mờ Tê Chat Pro</h1>
+
+        <p class="text-[10px] text-gray-400 mt-0.5">Hệ thống Phân Quyền & Game Boss Hacker</p>
+
+      </div>
+
+      <div class="flex bg-gray-950 p-1 rounded-xl mb-4 border border-gray-800">
+
+        <button type="button" id="tab-login-btn" onclick="switchAuthTab('login')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg text-white bg-blue-600 shadow-md transition-all">Đăng Nhập</button>
+
+        <button type="button" id="tab-register-btn" onclick="switchAuthTab('register')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg text-gray-400 hover:text-white transition-all">Đăng Ký</button>
+
+        <button type="button" id="tab-forgot-btn" onclick="switchAuthTab('forgot')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg text-gray-400 hover:text-white transition-all">Quên MK</button>
+
+      </div>
+
+      <div id="auth-alert" class="hidden mb-4 p-2.5 rounded-xl text-xs font-medium border flex items-center gap-2">
+
+        <i id="auth-alert-icon" class="fa-solid text-sm"></i>
+
+        <span id="auth-alert-text" class="flex-1 leading-snug"></span>
+
+      </div>
+
+      <!-- FORM ĐĂNG NHẬP -->
+
+      <form id="login-form" onsubmit="handleLogin(event)" class="space-y-3">
+
+        <div>
+
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Tên đăng nhập</label>
+
+          <div class="relative">
+
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500"><i class="fa-solid fa-user text-xs"></i></span>
+
+            <input type="text" id="login-username" required placeholder="Nhập tên đăng nhập" class="w-full pl-8 pr-3 py-2 bg-gray-950 border border-gray-800 rounded-xl focus:outline-none focus:border-blue-500 text-xs text-white placeholder-gray-600">
+
+          </div>
+
+        </div>
+
+        <div>
+
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Mật khẩu</label>
+
+          <div class="relative">
+
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500"><i class="fa-solid fa-lock text-xs"></i></span>
+
+            <input type="password" id="login-password" required placeholder="Nhập mật khẩu" class="w-full pl-8 pr-3 py-2 bg-gray-950 border border-gray-800 rounded-xl focus:outline-none focus:border-blue-500 text-xs text-white placeholder-gray-600">
+
+          </div>
+
+        </div>
+
+        <div class="flex items-center justify-between pt-1">
+
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+
+            <input type="checkbox" id="remember-me-checkbox" checked class="w-3.5 h-3.5 rounded bg-gray-950 border-gray-800 text-blue-600 focus:ring-0">
+
+            <span class="text-[11px] text-gray-300 font-medium">Ghi nhớ phiên đăng nhập</span>
+
+          </label>
+
+        </div>
+
+        <button type="submit" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-xl shadow-lg transition-all mt-1">Đăng Nhập Ngay</button>
+
+      </form>
+
+      <!-- FORM ĐĂNG KÝ -->
+
+      <form id="register-form" onsubmit="handleRegister(event)" class="space-y-3 hidden">
+
+        <div>
+
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Tên đăng nhập mới</label>
+
+          <input type="text" id="reg-username" required placeholder="Chữ cái a-z và số 0-9 (>=5 ký tự)" class="w-full px-3 py-2 bg-gray-950 border border-gray-800 rounded-xl text-xs text-white placeholder-gray-600">
+
+        </div>
+
+        <div>
+
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Mật khẩu</label>
+
+          <input type="password" id="reg-password" required placeholder="Tối thiểu 8 ký tự" class="w-full px-3 py-2 bg-gray-950 border border-gray-800 rounded-xl text-xs text-white placeholder-gray-600">
+
+        </div>
+
+        <button type="submit" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl shadow-lg transition-all mt-1">Đăng Ký Tài Khoản</button>
+
+      </form>
+
+      <!-- FORM QUÊN MẬT KHẨU -->
+
+      <div id="forgot-form-container" class="space-y-3 hidden">
+
+        <form onsubmit="handleRequestResetOTP(event)" class="space-y-2 pb-2 border-b border-gray-800">
+
+          <p class="text-[10px] text-amber-400 font-bold uppercase">BƯỚC 1: GỬI YÊU CẦU CẤP MÃ OTP</p>
+
+          <input type="text" id="forgot-username" required placeholder="Tên đăng nhập" class="w-full px-3 py-1.5 bg-gray-950 border border-gray-800 rounded-xl text-xs text-white">
+
+          <input type="email" id="forgot-email" required placeholder="Email đã liên kết" class="w-full px-3 py-1.5 bg-gray-950 border border-gray-800 rounded-xl text-xs text-white">
+
+          <button type="submit" class="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs rounded-xl transition-all">Gửi Yêu Cầu Cho Admin</button>
+
+        </form>
+
+        <form onsubmit="handleResetPasswordWithOTP(event)" class="space-y-2 pt-1">
+
+          <p class="text-[10px] text-emerald-400 font-bold uppercase">BƯỚC 2: ĐỔI MẬT KHẨU BẰNG OTP</p>
+
+          <input type="text" id="reset-username" required placeholder="Tên tài khoản" class="w-full px-3 py-1.5 bg-gray-950 border border-gray-800 rounded-xl text-xs text-white">
+
+          <input type="text" id="reset-otp-code" maxlength="6" required placeholder="Mã OTP 6 số" class="w-full px-3 py-1.5 bg-gray-950 border border-gray-800 rounded-xl text-xs font-mono text-center tracking-widest text-emerald-400">
+
+          <input type="password" id="reset-new-p
