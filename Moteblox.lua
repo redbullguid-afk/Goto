@@ -1,5 +1,5 @@
--- Blox Fruit Halloween Event Script - Part 1
--- Features: ESP Pumpkin, Interactive & Teleport, Auto Attack (No Click), Mob Waiting
+-- Blox Fruit Halloween Event Script - Part 1.1
+-- Added: Noclip, Auto-Select Melee (Slot 1 or 2), ESP, Auto Farm/Teleport
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -9,23 +9,63 @@ local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
--- Cấu hình tùy chỉnh
+-- Cấu hình
 getgenv().HalloweenSettings = {
     AutoESP = true,
     TeleportToPumpkin = true,
     AutoAttack = true,
     WaitMobClear = true,
-    AttackRange = 50, -- Khoảng cách tấn công xa
+    AutoNoclip = true,      -- Tự động bật Noclip khi di chuyển/bay
+    AutoSelectMelee = true, -- Tự động chọn Melee ở ô 1 hoặc 2
 }
 
--- Hàm kiểm tra và lấy pumpkin (bí ngô sự kiện)
+-- Tính năng Noclip (Chống kẹt tường/đảo khi bay)
+RunService.Stepped:Connect(function()
+    if getgenv().HalloweenSettings.AutoNoclip and LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
+
+-- Hàm tự động kiểm tra và chọn Melee (Võ) ở Slot 1 hoặc Slot 2
+local function EquipMelee()
+    if not getgenv().HalloweenSettings.AutoSelectMelee then return end
+    local character = LocalPlayer.Character
+    local backpack = LocalPlayer.Backpack
+
+    if not character or not backpack then return end
+
+    -- Kiểm tra nếu đã cầm Melee trên tay thì bỏ qua
+    local currentTool = character:FindFirstChildOfClass("Tool")
+    if currentTool and currentTool:FindFirstChild("ToolTip") and currentTool.ToolTip == "Melee" then
+        return
+    end
+
+    -- Tìm Melee ở Backpack (Kiểm tra ưu tiên Slot 1 & Slot 2)
+    local items = backpack:GetChildren()
+    for index = 1, math.min(2, #items) do
+        local tool = items[index]
+        if tool and tool:IsA("Tool") then
+            -- Kiểm tra ToolTip hoặc loại vũ khí là Melee
+            if (tool:FindFirstChild("ToolTip") and tool.ToolTip == "Melee") or string.find(tool.Name:lower(), "style") or string.find(tool.Name:lower(), "karate") or string.find(tool.Name:lower(), "step") or string.find(tool.Name:lower(), "claw") then
+                character.Humanoid:EquipTool(tool)
+                break
+            end
+        end
+    end
+end
+
+-- Hàm tìm Pumpkin gần nhất
 local function GetNearestPumpkin()
     local nearest = nil
     local shortestDist = math.huge
 
     for _, v in pairs(Workspace:GetChildren()) do
         if v:IsA("Model") and (string.find(v.Name:lower(), "pumpkin") or string.find(v.Name:lower(), "candy")) then
-            local rootPart = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChild("Part")
+            local rootPart = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChild("Part") or v:FindFirstChildOfClass("Part")
             if rootPart and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 local dist = (LocalPlayer.Character.HumanoidRootPart.Position - rootPart.Position).Magnitude
                 if dist < shortestDist then
@@ -38,75 +78,44 @@ local function GetNearestPumpkin()
     return nearest
 end
 
--- Tính năng ESP Pumpkin và Tương tác trực quan
-local function CreateESP(targetPart)
-    if not targetPart:FindFirstChild("HalloweenESP") then
-        local bill = Instance.new("BillboardGui")
-        bill.Name = "HalloweenESP"
-        bill.Size = UDim2.new(0, 100, 0, 50)
-        bill.AlwaysOnTop = true
-        bill.Adornee = targetPart
-
-        local text = Instance.new("TextLabel")
-        text.Size = UDim2.new(1, 0, 1, 0)
-        text.BackgroundTransparency = 1
-        text.Text = "🎃 Pumpkin"
-        text.TextColor3 = Color3.fromRGB(255, 140, 0)
-        text.TextScaled = true
-        text.Font = Enum.Font.SourceSansBold
-        text.Parent = bill
-
-        bill.Parent = targetPart
-    end
-end
-
--- Vòng lặp chính xử lý logic sự kiện
-Task = task.spawn(function()
-    while task.wait(0.5) do
+-- Vòng lặp chính
+task.spawn(function()
+    while task.wait(0.2) do
         pcall(function()
-            if not getgenv().HalloweenSettings.AutoESP then return end
-
             local character = LocalPlayer.Character
-            if not character or not character:FindFirstChild("HumanoidRootPart") then return end
-            local hrp = character.HumanoidRootPart
+            if not character or not character:FindFirstChild("HumanoidRootPart") or not character:FindFirstChild("Humanoid") then return end
+            
+            -- Gọi tự động trang bị Melee
+            EquipMelee()
 
-            -- Tìm Pumpkin
             local pumpkin = GetNearestPumpkin()
             if pumpkin then
                 local pPart = pumpkin:FindFirstChild("HumanoidRootPart") or pumpkin:FindFirstChild("PrimaryPart") or pumpkin:FindFirstChildOfClass("Part")
                 if pPart then
-                    CreateESP(pPart)
-
-                    -- Bay đến chỗ pumpkin nếu bật tính năng
+                    -- Bay/Dịch chuyển tới Pumpkin
                     if getgenv().HalloweenSettings.TeleportToPumpkin then
-                        hrp.CFrame = pPart.CFrame + Vector3.new(0, 5, 0)
+                        character.HumanoidRootPart.CFrame = pPart.CFrame + Vector3.new(0, 5, 0)
                     end
 
-                    -- Kiểm tra xem có quái vật xung quanh đang canh giữ không
+                    -- Kiểm tra quái vật xung quanh
                     local mobWaiting = false
-                    for _, mob in pairs(Workspace.Enemies:GetChildren()) do
-                        local mobHRP = mob:FindFirstChild("HumanoidRootPart")
-                        local mobHum = mob:FindFirstChild("Humanoid")
-                        if mobHRP and mobHum and mobHum.Health > 0 then
-                            if (mobHRP.Position - pPart.Position).Magnitude < 30 then
-                                mobWaiting = true
-                                -- Chờ quái chết trước khi lấy pumpkin hoặc xử lý quái
-                                if getgenv().HalloweenSettings.WaitMobClear then
-                                    -- Tấn công quái từ xa tự động
-                                    if getgenv().HalloweenSettings.AutoAttack then
-                                        VirtualUser:Button1Down(Vector2.new(0,0), Camera.CFrame)
-                                        task.wait(0.1)
-                                        VirtualUser:Button1Up(Vector2.new(0,0), Camera.CFrame)
-                                    end
+                    if Workspace:FindFirstChild("Enemies") then
+                        for _, mob in pairs(Workspace.Enemies:GetChildren()) do
+                            local mobHRP = mob:FindFirstChild("HumanoidRootPart")
+                            local mobHum = mob:FindFirstChild("Humanoid")
+                            if mobHRP and mobHum and mobHum.Health > 0 then
+                                if (mobHRP.Position - pPart.Position).Magnitude < 35 then
+                                    mobWaiting = true
+                                    break
                                 end
                             end
                         end
                     end
 
-                    -- Nếu không vướng quái hoặc quái đã chết, tiến hành tương tác tấn công/thu thập
-                    if not mobWaiting and getgenv().HalloweenSettings.AutoAttack then
+                    -- Tự động đánh (gửi lệnh click từ xa)
+                    if (not mobWaiting or getgenv().HalloweenSettings.WaitMobClear) and getgenv().HalloweenSettings.AutoAttack then
                         VirtualUser:Button1Down(Vector2.new(0,0), Camera.CFrame)
-                        task.wait(0.2)
+                        task.wait(0.1)
                         VirtualUser:Button1Up(Vector2.new(0,0), Camera.CFrame)
                     end
                 end
@@ -115,4 +124,4 @@ Task = task.spawn(function()
     end
 end)
 
-print("Blox Fruit Halloween Script Part 1 Loaded Successfully!")
+print("Blox Fruit Halloween Script Part 1.1 (Noclip & Auto Melee) Loaded!")
