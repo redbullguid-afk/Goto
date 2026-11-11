@@ -1,26 +1,25 @@
 -- ==========================================================
--- Blox Fruits Halloween Special - Săn Pumpkin Snowman + Debug Console
--- Tính năng: In tên & tọa độ ra Console Delta, Server Hop 5s, Auto Re-execute
+-- Blox Fruits - Auto Fruit Finder, Auto Store & Server Hop (5s)
+-- Feature: Auto Fly, Pick Up, Store Fruit, Skip Owned Fruit, Noclip & Anti-Fall
 -- ==========================================================
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 
 local LocalPlayer = Players.LocalPlayer
 
-getgenv().AutoSpecialPumpkin = true
+getgenv().AutoFruit = true
 getgenv().TweenSpeed = 300
 
-local noTargetTime = 0
-local lastLoggedTarget = nil -- Biến tránh spam log trùng lặp liên tục
+local noFruitTime = 0
+local CommF = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
 
-print("[Halloween Special] Đã kích hoạt Script Săn Pumpkin Snowman + Debug Console!")
+print("[Fruit Finder] Đã khởi động Script Auto Tìm & Lưu Trái Ác Quỷ!")
 
 -- 1. QUEUE ON TELEPORT (Tự động kích hoạt lại khi đổi server)
 local queueOnTeleport = syn and syn.queue_on_teleport or queue_on_teleport or fluxus and fluxus.queue_on_teleport or qut
@@ -36,17 +35,54 @@ end
 -- 2. Tự động chọn phe Hải Tặc khi vào game
 local function autoSelectPirates()
     pcall(function()
-        local commF = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_")
-        if commF then
-            commF:InvokeServer("SetTeam", "Pirates")
-        end
+        CommF:InvokeServer("SetTeam", "Pirates")
     end)
 end
 autoSelectPirates()
 
--- 3. Hàm Server Hop
+-- 3. Kiểm tra xem Trái Ác Quỷ đã có trong Rương/Kho đồ chưa
+local function isFruitOwned(fruitName)
+    local owned = false
+    pcall(function()
+        local inventory = CommF:InvokeServer("getInventory")
+        if inventory then
+            for _, item in pairs(inventory) do
+                if item.Name and item.Name:lower() == fruitName:lower() then
+                    owned = true
+                    break
+                end
+            end
+        end
+    end)
+    return owned
+end
+
+-- 4. Tự động Lưu Trái Ác Quỷ vào Kho
+local function autoStoreFruit()
+    pcall(function()
+        local char = LocalPlayer.Character
+        local backpack = LocalPlayer:FindFirstChild("Backpack")
+        
+        local function checkAndStore(tool)
+            if tool and tool:IsA("Tool") and tool.Name:find("Fruit") then
+                local fruitName = tool.Name
+                print("[Auto Store] Đang cất trái: " .. fruitName)
+                CommF:InvokeServer("StoreFruit", fruitName, tool)
+            end
+        end
+
+        if char then
+            for _, tool in pairs(char:GetChildren()) do checkAndStore(tool) end
+        end
+        if backpack then
+            for _, tool in pairs(backpack:GetChildren()) do checkAndStore(tool) end
+        end
+    end)
+end
+
+-- 5. Hàm Server Hop tự động
 local function serverHop()
-    print("[Server Hop] Không tìm thấy Pumpkin Snowman trong 5s. Đang đổi server...")
+    print("[Server Hop] Không có Trái Ác Quỷ phù hợp trong 5s. Đang đổi server...")
     pcall(function()
         local placeId = game.PlaceId
         local servers = {}
@@ -69,9 +105,9 @@ local function serverHop()
     end)
 end
 
--- 4. Hệ thống Noclip & Lơ Lửng (Anti-Fall)
+-- 6. Noclip & Giữ lơ lửng chống rơi
 RunService.Stepped:Connect(function()
-    if getgenv().AutoSpecialPumpkin and LocalPlayer.Character then
+    if getgenv().AutoFruit and LocalPlayer.Character then
         pcall(function()
             local char = LocalPlayer.Character
             local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -84,9 +120,9 @@ RunService.Stepped:Connect(function()
                     end
                 end
 
-                if not hrp:FindFirstChild("SpecialHoverForce") then
+                if not hrp:FindFirstChild("FruitHoverForce") then
                     local hover = Instance.new("BodyVelocity")
-                    hover.Name = "SpecialHoverForce"
+                    hover.Name = "FruitHoverForce"
                     hover.Velocity = Vector3.new(0, 0, 0)
                     hover.MaxForce = Vector3.new(0, math.huge, 0)
                     hover.Parent = hrp
@@ -100,54 +136,8 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- 5. Tự động trang bị vũ khí Melee / Sword
-local function autoScanAndEquipWeapon()
-    local char = LocalPlayer.Character
-    if not char then return nil end
-    
-    local currentTool = char:FindFirstChildOfClass("Tool")
-    if currentTool then return currentTool end
-    
-    local backpack = LocalPlayer:FindFirstChild("Backpack")
-    if backpack then
-        for _, tool in pairs(backpack:GetChildren()) do
-            if tool:IsA("Tool") then
-                local toolType = tool.ToolTip
-                if toolType == "Melee" or toolType == "Sword" or tool:FindFirstChild("Combat") or tool:FindFirstChild("Weapon") then
-                    char.Humanoid:EquipTool(tool)
-                    return tool
-                end
-            end
-        end
-        local firstTool = backpack:FindFirstChildOfClass("Tool")
-        if firstTool then
-            char.Humanoid:EquipTool(firstTool)
-            return firstTool
-        end
-    end
-    return nil
-end
-
--- 6. Fast Attack
-local function forceAttack()
-    pcall(function()
-        local tool = autoScanAndEquipWeapon()
-        if tool then tool:Activate() end
-        
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-        task.wait(0.01)
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-        
-        local netFolder = ReplicatedStorage:FindFirstChild("Modules") and ReplicatedStorage.Modules:FindFirstChild("Net")
-        if netFolder then
-            local regAttack = netFolder:FindFirstChild("RE/RegisterAttack") or netFolder:FindFirstChild("RegisterAttack")
-            if regAttack then regAttack:FireServer() end
-        end
-    end)
-end
-
--- 7. HÀM QUÉT CHÍNH XÁC + IN THÔNG BÁO DEBUG MỖI KHI TÌM THẤY
-local function getPumpkinSnowmanTarget()
+-- 7. HÀM QUÉT VÀ LỌC TRÁI ÁC QUỶ TRÊN BẢN ĐỒ
+local function getTargetFruit()
     local nearest = nil
     local shortestDistance = math.huge
     local char = LocalPlayer.Character
@@ -155,39 +145,19 @@ local function getPumpkinSnowmanTarget()
     if not hrp then return nil end
 
     pcall(function()
-        local searchFolders = {Workspace:FindFirstChild("Enemies"), Workspace}
-        
-        for _, folder in pairs(searchFolders) do
-            if folder then
-                for _, obj in pairs(folder:GetChildren()) do
-                    if obj:IsA("Model") then
-                        local name = obj.Name:lower()
-                        
-                        -- Lọc đúng Pumpkin Snowman
-                        if name:find("pumpkin") and name:find("snowman") then
-                            local humanoid = obj:FindFirstChildOfClass("Humanoid")
-                            local primaryPart = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-
-                            if humanoid and humanoid.Health > 0 and primaryPart then
-                                local dist = (hrp.Position - primaryPart.Position).Magnitude
-                                if dist < shortestDistance then
-                                    shortestDistance = dist
-                                    nearest = primaryPart
-                                    
-                                    -- In thông báo Debug ra Console Delta (chỉ in 1 lần mỗi khi phát hiện con mới)
-                                    if lastLoggedTarget ~= obj then
-                                        lastLoggedTarget = obj
-                                        local pos = primaryPart.Position
-                                        print("========================================")
-                                        print("[FOUND] Phát hiện Pumpkin Snowman!")
-                                        print(" Tên Model: " .. obj.Name)
-                                        print(" Máu (HP): " .. math.floor(humanoid.Health) .. "/" .. math.floor(humanoid.MaxHealth))
-                                        print(string.format(" Tọa độ (XYZ): X: %.1f | Y: %.1f | Z: %.1f", pos.X, pos.Y, pos.Z))
-                                        print(" Khoảng cách: " .. math.floor(dist) .. " studs")
-                                        print("========================================")
-                                    end
-                                end
-                            end
+        for _, obj in pairs(Workspace:GetChildren()) do
+            -- Kiểm tra vật thể là Trái Ác Quỷ (Tool/Model chứa từ 'Fruit')
+            if (obj:IsA("Tool") or obj:IsA("Model")) and obj.Name:find("Fruit") then
+                local fruitName = obj.Name
+                
+                -- Bỏ qua nếu trái này người chơi đã sở hữu trong kho
+                if not isFruitOwned(fruitName) then
+                    local handle = obj:FindFirstChild("Handle") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                    if handle then
+                        local dist = (hrp.Position - handle.Position).Magnitude
+                        if dist < shortestDistance then
+                            shortestDistance = dist
+                            nearest = handle
                         end
                     end
                 end
@@ -198,35 +168,16 @@ local function getPumpkinSnowmanTarget()
     return nearest
 end
 
--- 8. Luồng Tấn Công
-task.spawn(function()
-    while true do
-        task.wait(0.05)
-        if getgenv().AutoSpecialPumpkin then
-            pcall(function()
-                local char = LocalPlayer.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                if not hrp then return end
-
-                local target = getPumpkinSnowmanTarget()
-                if target then
-                    local distance = (hrp.Position - target.Position).Magnitude
-                    if distance <= 25 then
-                        forceAttack()
-                    end
-                end
-            end)
-        end
-    end
-end)
-
--- 9. Luồng Bay (Tween) & Kiểm Soát Server Hop (5s)
+-- 8. Luồng Bay (Tween), Tương tác nhặt & Server Hop (5s)
 task.spawn(function()
     local currentTween = nil
     
     while task.wait(0.5) do
-        if getgenv().AutoSpecialPumpkin then
+        if getgenv().AutoFruit then
             pcall(function()
+                -- Thử cất trái nếu đang cầm trên tay hoặc trong Balo
+                autoStoreFruit()
+
                 local char = LocalPlayer.Character
                 if not char or not char:FindFirstChild("HumanoidRootPart") then
                     autoSelectPirates()
@@ -234,14 +185,14 @@ task.spawn(function()
                 end
                 local hrp = char.HumanoidRootPart
 
-                local target = getPumpkinSnowmanTarget()
-                if target and target.Parent then
-                    noTargetTime = 0
+                local targetFruit = getTargetFruit()
+                if targetFruit and targetFruit.Parent then
+                    noFruitTime = 0 -- Reset thời gian đếm khi phát hiện trái
                     
-                    local targetCFrame = target.CFrame * CFrame.new(0, 5, 0)
+                    local targetCFrame = targetFruit.CFrame
                     local distance = (hrp.Position - targetCFrame.Position).Magnitude
 
-                    if distance > 6 then
+                    if distance > 3 then
                         if currentTween then currentTween:Cancel() end
                         local timeTravel = distance / getgenv().TweenSpeed
                         local tweenInfo = TweenInfo.new(timeTravel, Enum.EasingStyle.Linear)
@@ -250,14 +201,25 @@ task.spawn(function()
                     else
                         if currentTween then currentTween:Cancel() end
                         hrp.CFrame = targetCFrame
+                        
+                        -- Tương tác nhặt trái (ProximityPrompt hoặc Touch)
+                        local parentObj = targetFruit.Parent
+                        if parentObj then
+                            for _, prompt in pairs(parentObj:GetDescendants()) do
+                                if prompt:IsA("ProximityPrompt") then
+                                    fireproximityprompt(prompt)
+                                end
+                            end
+                        end
+                        task.wait(0.5)
+                        autoStoreFruit()
                     end
                 else
                     if currentTween then currentTween:Cancel() end
-                    lastLoggedTarget = nil -- Reset biến log khi mục tiêu bị tiêu diệt
-                    noTargetTime = noTargetTime + 0.5
-                    print("[Server Hop Tracker] Đang tìm Pumpkin Snowman: " .. noTargetTime .. "/5s")
+                    noFruitTime = noFruitTime + 0.5
+                    print("[Fruit Finder] Không tìm thấy trái mới: " .. noFruitTime .. "/5s")
 
-                    if noTargetTime >= 5 then
+                    if noFruitTime >= 5 then
                         serverHop()
                     end
                 end
