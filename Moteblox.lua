@@ -1,6 +1,6 @@
 -- ==========================================================
--- Blox Fruits Halloween Special - Auto Bí Ngô + Server Hop (5s) + Auto Re-execute
--- Tính năng: Tự động chạy lại script khi đổi server, Lọc Người Tuyết, Lơ lửng chống rơi
+-- Blox Fruits Halloween Special - Săn Pumpkin Snowman + Debug Console
+-- Tính năng: In tên & tọa độ ra Console Delta, Server Hop 5s, Auto Re-execute
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -17,18 +17,18 @@ local LocalPlayer = Players.LocalPlayer
 getgenv().AutoSpecialPumpkin = true
 getgenv().TweenSpeed = 300
 
-local noTargetTime = 0 -- Bộ đếm thời gian không tìm thấy mục tiêu
+local noTargetTime = 0
+local lastLoggedTarget = nil -- Biến tránh spam log trùng lặp liên tục
 
-print("[Halloween Special] Đã kích hoạt Script Săn Bí Ngô Người Tuyết + Server Hop + Auto Re-execute!")
+print("[Halloween Special] Đã kích hoạt Script Săn Pumpkin Snowman + Debug Console!")
 
--- 1. TỰ ĐỘNG GHI NHỚ VÀ CHẠY LẠI SCRIPT KHI ĐỔI SERVER (QUEUE ON TELEPORT)
+-- 1. QUEUE ON TELEPORT (Tự động kích hoạt lại khi đổi server)
 local queueOnTeleport = syn and syn.queue_on_teleport or queue_on_teleport or fluxus and fluxus.queue_on_teleport or qut
 if queueOnTeleport then
     pcall(function()
         queueOnTeleport([[
-            -- Script sẽ tự động chạy lại ngay khi vào server mới
-            task.wait(3) -- Chờ load game ổn định
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/redbullguid-afk/Goto/main/Moteblox.lua"))() -- Hoặc chạy lại chính mã nguồn này
+            task.wait(3)
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/redbullguid-afk/Goto/main/Moteblox.lua"))()
         ]])
     end)
 end
@@ -44,9 +44,9 @@ local function autoSelectPirates()
 end
 autoSelectPirates()
 
--- 3. Hàm Server Hop (Đổi server tự động và tự động kích hoạt queue_on_teleport)
+-- 3. Hàm Server Hop
 local function serverHop()
-    print("[Server Hop] Không thấy Bí Ngô Người Tuyết trong 5s. Đang đổi server...")
+    print("[Server Hop] Không tìm thấy Pumpkin Snowman trong 5s. Đang đổi server...")
     pcall(function()
         local placeId = game.PlaceId
         local servers = {}
@@ -69,7 +69,7 @@ local function serverHop()
     end)
 end
 
--- 4. Hệ thống Noclip & Khóa trọng lực Lơ Lửng (Anti-Fall)
+-- 4. Hệ thống Noclip & Lơ Lửng (Anti-Fall)
 RunService.Stepped:Connect(function()
     if getgenv().AutoSpecialPumpkin and LocalPlayer.Character then
         pcall(function()
@@ -128,7 +128,7 @@ local function autoScanAndEquipWeapon()
     return nil
 end
 
--- 6. Kích hoạt Fast Attack
+-- 6. Fast Attack
 local function forceAttack()
     pcall(function()
         local tool = autoScanAndEquipWeapon()
@@ -146,8 +146,8 @@ local function forceAttack()
     end)
 end
 
--- 7. HÀM QUÉT: Lọc bỏ triệt để Jack O' Lantern & Chỉ lấy Người Tuyết Bí Ngô
-local function getSpecialPumpkinTarget()
+-- 7. HÀM QUÉT CHÍNH XÁC + IN THÔNG BÁO DEBUG MỖI KHI TÌM THẤY
+local function getPumpkinSnowmanTarget()
     local nearest = nil
     local shortestDistance = math.huge
     local char = LocalPlayer.Character
@@ -163,23 +163,29 @@ local function getSpecialPumpkinTarget()
                     if obj:IsA("Model") then
                         local name = obj.Name:lower()
                         
-                        -- LOẠI BỎ TRIỆT ĐỂ JACK O' LANTERN HOẶC PLAYER
-                        local isJack = name:find("jack") or name:find("lantern")
-                        local isPlayer = Players:GetPlayerFromCharacter(obj)
-
-                        if not isJack and not isPlayer then
+                        -- Lọc đúng Pumpkin Snowman
+                        if name:find("pumpkin") and name:find("snowman") then
                             local humanoid = obj:FindFirstChildOfClass("Humanoid")
                             local primaryPart = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
 
-                            -- Nhận diện Người tuyết bí ngô (Snowman / Stack / Giant / Model có Humanoid)
-                            local isSpecialPumpkin = (name:find("snowman") or name:find("pumpkin") or name:find("stack") or name:find("boss")) 
-                                                      and humanoid and humanoid.Health > 0
-
-                            if isSpecialPumpkin and primaryPart then
+                            if humanoid and humanoid.Health > 0 and primaryPart then
                                 local dist = (hrp.Position - primaryPart.Position).Magnitude
                                 if dist < shortestDistance then
                                     shortestDistance = dist
                                     nearest = primaryPart
+                                    
+                                    -- In thông báo Debug ra Console Delta (chỉ in 1 lần mỗi khi phát hiện con mới)
+                                    if lastLoggedTarget ~= obj then
+                                        lastLoggedTarget = obj
+                                        local pos = primaryPart.Position
+                                        print("========================================")
+                                        print("[FOUND] Phát hiện Pumpkin Snowman!")
+                                        print(" Tên Model: " .. obj.Name)
+                                        print(" Máu (HP): " .. math.floor(humanoid.Health) .. "/" .. math.floor(humanoid.MaxHealth))
+                                        print(string.format(" Tọa độ (XYZ): X: %.1f | Y: %.1f | Z: %.1f", pos.X, pos.Y, pos.Z))
+                                        print(" Khoảng cách: " .. math.floor(dist) .. " studs")
+                                        print("========================================")
+                                    end
                                 end
                             end
                         end
@@ -202,7 +208,7 @@ task.spawn(function()
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
                 if not hrp then return end
 
-                local target = getSpecialPumpkinTarget()
+                local target = getPumpkinSnowmanTarget()
                 if target then
                     local distance = (hrp.Position - target.Position).Magnitude
                     if distance <= 25 then
@@ -214,7 +220,7 @@ task.spawn(function()
     end
 end)
 
--- 9. Luồng Bay (Tween) & Kiểm Soát Server Hop (5 Giây)
+-- 9. Luồng Bay (Tween) & Kiểm Soát Server Hop (5s)
 task.spawn(function()
     local currentTween = nil
     
@@ -228,9 +234,8 @@ task.spawn(function()
                 end
                 local hrp = char.HumanoidRootPart
 
-                local target = getSpecialPumpkinTarget()
+                local target = getPumpkinSnowmanTarget()
                 if target and target.Parent then
-                    -- Tìm thấy mục tiêu -> Reset thời gian đếm Server Hop
                     noTargetTime = 0
                     
                     local targetCFrame = target.CFrame * CFrame.new(0, 5, 0)
@@ -247,12 +252,11 @@ task.spawn(function()
                         hrp.CFrame = targetCFrame
                     end
                 else
-                    -- Không tìm thấy mục tiêu -> Cộng dồn thời gian đếm
                     if currentTween then currentTween:Cancel() end
+                    lastLoggedTarget = nil -- Reset biến log khi mục tiêu bị tiêu diệt
                     noTargetTime = noTargetTime + 0.5
-                    print("[Server Hop Tracker] Không có mục tiêu: " .. noTargetTime .. "/5 giây")
+                    print("[Server Hop Tracker] Đang tìm Pumpkin Snowman: " .. noTargetTime .. "/5s")
 
-                    -- Đủ 5 giây không thấy mục tiêu -> Tự động Hop Server
                     if noTargetTime >= 5 then
                         serverHop()
                     end
