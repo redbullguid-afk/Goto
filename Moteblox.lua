@@ -1,67 +1,37 @@
--- Blox Fruits Halloween Event Script - Fixed & Anti-Cheat Bypassed for Delta
+-- ==========================================================
+-- Blox Fruits Halloween Event Auto Script - Phần 1
+-- Tính năng: Auto ESP Pumpkin, Tween Bay, Auto Attack, Xử lý Quái
+-- ==========================================================
+
 local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local VirtualUser = game:GetService("VirtualUser")
 
 local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 
--- Cấu hình cài đặt
-getgenv().HalloweenSettings = {
-    TeleportToPumpkin = true,
-    AutoAttack = true,
-    AutoNoclip = true,
-    AutoSelectMelee = true,
-}
+-- Cấu hình người dùng
+getgenv().AutoPumpkin = true
+getgenv().TweenSpeed = 350 -- Tốc độ bay (điều chỉnh tùy ý)
 
--- Tính năng Noclip an toàn chống kẹt
-RunService.Stepped:Connect(function()
-    if getgenv().HalloweenSettings.AutoNoclip and LocalPlayer.Character then
-        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") and part.CanCollide then
-                part.CanCollide = false
-            end
-        end
-    end
-end)
+print("[Halloween Script] Đã khởi động Phần 1 thành công!")
 
--- Tự động chọn Melee (Võ) ở ô 1 hoặc 2
-local function EquipMelee()
-    if not getgenv().HalloweenSettings.AutoSelectMelee then return end
-    local character = LocalPlayer.Character
-    local backpack = LocalPlayer.Backpack
-    if not character or not backpack then return end
-
-    local currentTool = character:FindFirstChildOfClass("Tool")
-    if currentTool and currentTool:FindFirstChild("ToolTip") and currentTool.ToolTip == "Melee" then
-        return
-    end
-
-    local items = backpack:GetChildren()
-    for index = 1, math.min(2, #items) do
-        local tool = items[index]
-        if tool and tool:IsA("Tool") then
-            if (tool:FindFirstChild("ToolTip") and tool.ToolTip == "Melee") or string.find(tool.Name:lower(), "style") or string.find(tool.Name:lower(), "step") or string.find(tool.Name:lower(), "claw") or string.find(tool.Name:lower(), "human") then
-                character.Humanoid:EquipTool(tool)
-                break
-            end
-        end
-    end
-end
-
--- Tìm Pumpkin gần nhất trên Workspace
-local function GetNearestPumpkin()
+-- Hàm tìm kiếm Pumpkin gần nhất trong Workspace
+local function getNearestPumpkin()
     local nearest = nil
-    local shortestDist = math.huge
+    local shortestDistance = math.huge
 
-    for _, v in pairs(Workspace:GetChildren()) do
-        if v:IsA("Model") and (string.find(v.Name:lower(), "pumpkin") or string.find(v.Name:lower(), "candy")) then
-            local rootPart = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChild("PrimaryPart") or v:FindFirstChildOfClass("Part")
-            if rootPart and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                local dist = (LocalPlayer.Character.HumanoidRootPart.Position - rootPart.Position).Magnitude
-                if dist < shortestDist then
-                    shortestDist = dist
-                    nearest = v
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj.Name:lower():find("pumpkin") or obj.Name:lower():find("candy") then
+            local part = obj:IsA("Model") and obj.PrimaryPart or (obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart"))
+            if part then
+                local dist = (HumanoidRootPart.Position - part.Position).Magnitude
+                if dist < shortestDistance then
+                    shortestDistance = dist
+                    nearest = part
                 end
             end
         end
@@ -69,44 +39,89 @@ local function GetNearestPumpkin()
     return nearest
 end
 
--- Hàm tấn công chuẩn bằng Combat Remotes của Blox Fruits (Thay thế VirtualUser bị Anti-Cheat chặn)
-local function AttackTarget()
+-- Hàm kiểm tra quái vật xuất hiện xung quanh
+local function checkNearbyMobs()
+    local enemiesFolder = Workspace:FindFirstChild("Enemies")
+    if not enemiesFolder then return nil end
+
+    for _, enemy in pairs(enemiesFolder:GetChildren()) do
+        local hrp = enemy:FindFirstChild("HumanoidRootPart")
+        local hum = enemy:FindFirstChild("Humanoid")
+        if hrp and hum and hum.Health > 0 then
+            local dist = (HumanoidRootPart.Position - hrp.Position).Magnitude
+            if dist < 25 then -- Phạm vi phát hiện quái đứng chờ/cản đường
+                return enemy
+            end
+        end
+    end
+    return nil
+end
+
+-- Hàm gửi lệnh tấn công tự động (Không cần người chơi click chuột)
+local function autoAttack()
     pcall(function()
-        local combatRemote = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_")
-        if combatRemote then
-            combatRemote:InvokeServer("LeftClick")
+        local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+        if tool then
+            tool:Activate()
+        else
+            -- Kích hoạt tấn công cơ bản / combat nếu không cầm tool
+            VirtualUser:Button1Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+            task.wait(0.1)
+            VirtualUser:Button1Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
         end
     end)
 end
 
--- Vòng lặp chính thực thi an toàn
+-- Vòng lặp chính xử lý logic sự kiện
 task.spawn(function()
-    while task.wait(0.3) do
-        pcall(function()
-            local character = LocalPlayer.Character
-            if not character or not character:FindFirstChild("HumanoidRootPart") or not character:FindFirstChild("Humanoid") then return end
-            
-            -- Trang bị vũ khí Melee
-            EquipMelee()
+    while task.wait(0.5) do
+        if getgenv().AutoPumpkin then
+            pcall(function()
+                Character = LocalPlayer.Character
+                if not Character or not Character:FindFirstChild("HumanoidRootPart") then return end
+                HumanoidRootPart = Character.HumanoidRootPart
 
-            -- Tìm và di chuyển đến Pumpkin
-            local pumpkin = GetNearestPumpkin()
-            if pumpkin then
-                local pPart = pumpkin:FindFirstChild("HumanoidRootPart") or pumpkin:FindFirstChild("PrimaryPart") or pumpkin:FindFirstChildOfClass("Part")
-                if pPart then
-                    if getgenv().HalloweenSettings.TeleportToPumpkin then
-                        -- Dịch chuyển nhẹ nhàng phía trên Pumpkin để tránh bị lọt xuống đất
-                        character.HumanoidRootPart.CFrame = pPart.CFrame + Vector3.new(0, 4, 0)
+                -- 1. Ưu tiên xử lý nếu có quái xuất hiện gần đó
+                local mob = checkNearbyMobs()
+                if mob and mob:FindFirstChild("HumanoidRootPart") then
+                    local mobHrp = mob.HumanoidRootPart
+                    local distToMob = (HumanoidRootPart.Position - mobHrp.Position).Magnitude
+                    
+                    if distToMob > 10 then
+                        local tweenInfo = TweenInfo.new(distToMob / getgenv().TweenSpeed, Enum.EasingStyle.Linear)
+                        local tween = TweenService:Create(HumanoidRootPart, tweenInfo, {CFrame = mobHrp.CFrame * CFrame.new(0, 5, 5)})
+                        tween:Play()
+                        tween.Completed:Wait()
                     end
 
-                    -- Thực hiện tấn công tự động
-                    if getgenv().HalloweenSettings.AutoAttack then
-                        AttackTarget()
+                    -- Đứng chờ và đánh liên tục cho đến khi quái chết
+                    while mob and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 and getgenv().AutoPumpkin do
+                        autoAttack()
+                        task.wait(0.2)
                     end
                 end
-            end
-        end)
+
+                -- 2. Tìm và bay đến Pumpkin
+                local pumpkin = getNearestPumpkin()
+                if pumpkin then
+                    local distance = (HumanoidRootPart.Position - pumpkin.Position).Magnitude
+                    local timeTravel = distance / getgenv().TweenSpeed
+                    
+                    local tweenInfo = TweenInfo.new(timeTravel, Enum.EasingStyle.Linear)
+                    local tween = TweenService:Create(HumanoidRootPart, tweenInfo, {CFrame = pumpkin.CFrame + Vector3.new(0, 3, 0)})
+                    tween:Play()
+                    
+                    -- Theo dõi trong quá trình bay: nếu pumpkin biến mất hoặc bị người khác nhặt mất
+                    while tween.PlaybackState == Enum.PlaybackState.Playing do
+                        if not pumpkin.Parent or not pumpkin then
+                            tween:Cancel()
+                            print("[Halloween Script] Pumpkin đã biến mất, chuyển sang mục tiêu tiếp theo...")
+                            break
+                        end
+                        task.wait(0.1)
+                    end
+                end
+            end)
+        end
     end
 end)
-
-print("Blox Fruits Halloween Script (Anti-Cheat Bypass) Successfully Loaded!")
