@@ -1,6 +1,6 @@
 -- ==========================================================
--- Blox Fruits - Auto Pick & Smart Store (Fix Ô Số 1, Ô Số 2 & Skip)
--- Quy trình: Nhặt Trái -> Kiểm Tra Rương -> Cất Trái Hoặc Skip -> Server Hop 5s
+-- Blox Fruits - Auto Fruit Finder (Fix Bấm Nhầm Ô Kỹ Năng Trái Đã Ăn)
+-- Tính năng: Nhặt trái -> Kiểm tra rương -> Cất kho -> Bỏ qua skill đang dùng -> Server Hop 5s
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -17,9 +17,9 @@ getgenv().AutoFruit = true
 getgenv().TweenSpeed = 250
 
 local noFruitTime = 0
-local processedFruits = {} -- Danh sách đánh dấu các trái đã bỏ qua (Skip List)
+local processedFruits = {}
 
-print("[Smart Fruit] Đã khởi động script kiểm tra & lưu trữ chính xác!")
+print("[Smart Fruit] Đã bật bộ lọc: Bỏ qua tuyệt đối skill/trái đang ăn trên người!")
 
 -- 1. Auto Re-execute khi đổi Server
 pcall(function()
@@ -70,7 +70,7 @@ local function isFruitInInventory(fruitName)
     return owned
 end
 
--- 5. XỬ LÝ LƯU TRỮ HOẶC SKIP (QUÉT TẤT CẢ CÁC Ô TRONG BALO & NHÂN VẬT)
+-- 5. XỬ LÝ LƯU TRỮ (CHỈ QUÉT BALO, BỎ QUA HOÀN TOÀN NHÂN VẬT ĐANG CẦM/DÙNG SKILL)
 local function processAndStoreFruits()
     pcall(function()
         local commF = getCommF()
@@ -78,43 +78,37 @@ local function processAndStoreFruits()
 
         local char = LocalPlayer.Character
         local backpack = LocalPlayer:FindFirstChild("Backpack")
-        if not char or not backpack then return end
+        if not backpack then return end
 
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
 
-        -- Gom tất cả vật phẩm ở Ô số 1, Ô số 2, Balo và trên tay nhân vật
-        local allTools = {}
-        for _, tool in pairs(char:GetChildren()) do
-            if tool:IsA("Tool") then table.insert(allTools, tool) end
-        end
+        -- CHỈ QUÉT CÁC ITEM THỰC SỰ NẰM TRONG BALO (BACKPACK)
+        -- Tuyệt đối không quét thư mục Character để tránh đụng vào skill/vũ khí đang cầm trên tay
         for _, tool in pairs(backpack:GetChildren()) do
-            if tool:IsA("Tool") then table.insert(allTools, tool) end
-        end
+            if tool:IsA("Tool") then
+                local name = tool.Name
+                
+                -- Kiểm tra xem có phải là Trái Ác Quỷ vật phẩm không (loại trừ tượng và skill)
+                if (name:find("Fruit") or tool.ToolTip == "Blox Fruit") and not name:find("Statue") then
+                    
+                    if not processedFruits[tool] then
+                        print("[Check] Tìm thấy trái trong balo: " .. name)
 
-        for _, tool in pairs(allTools) do
-            local name = tool.Name
-            -- Kiểm tra xem vật phẩm có phải là Trái Ác Quỷ không
-            if (name:find("Fruit") or tool.ToolTip == "Blox Fruit") and not name:find("Statue") then
-                -- Bỏ qua nếu trái này đã nằm trong danh sách Đã Bỏ Qua (Skip)
-                if not processedFruits[tool] then
-                    print("[Check] Đang kiểm tra trái: " .. name)
-
-                    -- Kiểm tra xem trong Rương đã có trái này chưa
-                    if isFruitInInventory(name) then
-                        print("[SKIP] Trái " .. name .. " ĐÃ CÓ trong rương -> Đánh dấu BỎ QUA!")
-                        processedFruits[tool] = true -- Đánh dấu Skip trái ở ô này
-                    else
-                        print("[STORE] Trái " .. name .. " CHƯA CÓ trong rương -> Đang cất...")
-                        
-                        -- Cầm trái lên tay để cất
-                        if tool.Parent == backpack and humanoid then
-                            humanoid:EquipTool(tool)
-                            task.wait(0.3)
+                        if isFruitInInventory(name) then
+                            print("[SKIP] Trái " .. name .. " đã có trong rương -> Bỏ qua!")
+                            processedFruits[tool] = true
+                        else
+                            print("[STORE] Đang cất trái: " .. name)
+                            
+                            -- Cầm tạm lên tay để gọi remote cất vào rương
+                            if humanoid then
+                                humanoid:EquipTool(tool)
+                                task.wait(0.3)
+                            end
+                            
+                            commF:InvokeServer("StoreFruit", name, tool)
+                            task.wait(0.5)
                         end
-                        
-                        -- Gửi lệnh lưu trữ vào Rương
-                        commF:InvokeServer("StoreFruit", name, tool)
-                        task.wait(0.5)
                     end
                 end
             end
@@ -124,7 +118,7 @@ end
 
 -- 6. Server Hop 5s
 local function serverHop()
-    print("[Server Hop] Không có trái mới chưa sở hữu trong 5s. Đang đổi server...")
+    print("[Server Hop] Không có trái mới trong 5s. Đang đổi server...")
     pcall(function()
         local placeId = game.PlaceId
         local servers = {}
@@ -187,12 +181,10 @@ local function getTargetFruit()
             if obj:IsA("Tool") or (obj:IsA("Model") and obj:FindFirstChild("Handle")) then
                 local name = obj.Name:lower()
                 
-                -- Loại bỏ hoàn toàn Bức tượng, NPC, Bệ thờ
                 local isStatueOrQuest = name:find("statue") or name:find("pedestal") or name:find("shrine") or name:find("quest") or name:find("npc")
                 local isInsideCharacter = obj:FindFirstAncestorOfClass("Model") and Players:GetPlayerFromCharacter(obj:FindFirstAncestorOfClass("Model"))
                 
                 if not isStatueOrQuest and not isInsideCharacter then
-                    -- Bỏ qua nếu trái dưới đất này đã có sẵn trong rương
                     if not isFruitInInventory(obj.Name) then
                         local handle = obj:FindFirstChild("Handle") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
                         if handle then
@@ -218,14 +210,13 @@ task.spawn(function()
     while task.wait(0.3) do
         if getgenv().AutoFruit then
             pcall(function()
-                -- Bước 1: Kiểm tra các trái hiện có trong Balo / Ô 1 / Ô 2
+                -- Kiểm tra balo để cất trái mới nhặt, không đụng đến skill đang ăn trên người
                 processAndStoreFruits()
 
                 local char = LocalPlayer.Character
                 if not char or not char:FindFirstChild("HumanoidRootPart") then return end
                 local hrp = char.HumanoidRootPart
 
-                -- Bước 2: Quét tìm trái dưới đất
                 local targetFruit = getTargetFruit()
                 if targetFruit and targetFruit.Parent then
                     noFruitTime = 0
@@ -243,13 +234,11 @@ task.spawn(function()
                         if currentTween then currentTween:Cancel() end
                         hrp.CFrame = targetCFrame
                         
-                        -- Nhặt trái bằng Touch Event
                         if firetouchinterest and char:FindFirstChild("LeftFoot") then
                             firetouchinterest(char.LeftFoot, targetFruit, 0)
                             firetouchinterest(char.LeftFoot, targetFruit, 1)
                         end
                         
-                        -- Nhặt bằng ProximityPrompt
                         local parentObj = targetFruit.Parent
                         if parentObj then
                             for _, prompt in pairs(parentObj:GetDescendants()) do
@@ -260,13 +249,12 @@ task.spawn(function()
                         end
                         
                         task.wait(0.5)
-                        -- Bước 3: Sau khi chạm nhặt xong -> Xử lý cất hoặc skip ngay lập tức
                         processAndStoreFruits()
                     end
                 else
                     if currentTween then currentTween:Cancel() end
                     noFruitTime = noFruitTime + 0.3
-                    print("[Fruit Finder] Đang tìm trái mới chưa có trong rương: " .. math.floor(noFruitTime) .. "/5s")
+                    print("[Fruit Finder] Đang tìm trái mới: " .. math.floor(noFruitTime) .. "/5s")
 
                     if noFruitTime >= 5 then
                         serverHop()
