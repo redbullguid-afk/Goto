@@ -1,6 +1,6 @@
 -- ==========================================================
--- Blox Fruits - Auto Fruit Finder (Fix Bấm Nhầm Ô Kỹ Năng Trái Đã Ăn)
--- Tính năng: Nhặt trái -> Kiểm tra rương -> Cất kho -> Bỏ qua skill đang dùng -> Server Hop 5s
+-- Blox Fruits - Auto Fruit Finder & Silent Store (Chống Bấm Nhầm Skill)
+-- Tính năng: Nhặt trái -> Kiểm tra rương -> Cất thẳng từ Balo (Không Equip) -> Server Hop 5s
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -19,7 +19,7 @@ getgenv().TweenSpeed = 250
 local noFruitTime = 0
 local processedFruits = {}
 
-print("[Smart Fruit] Đã bật bộ lọc: Bỏ qua tuyệt đối skill/trái đang ăn trên người!")
+print("[Silent Store] Đã bật chế độ CẤT THẲNG TỪ BALO - Không bao giờ bấm vào ô Skill!")
 
 -- 1. Auto Re-execute khi đổi Server
 pcall(function()
@@ -32,7 +32,7 @@ pcall(function()
     end
 end)
 
--- 2. Hàm lấy Remote CommF_ an toàn
+-- 2. Hàm lấy Remote CommF_
 local function getCommF()
     local success, comm = pcall(function()
         return ReplicatedStorage:WaitForChild("Remotes", 5):WaitForChild("CommF_", 5)
@@ -41,7 +41,7 @@ local function getCommF()
     return nil
 end
 
--- 3. Chọn phe Hải Tặc
+-- 3. Tự chọn phe Hải Tặc
 task.spawn(function()
     task.wait(1)
     pcall(function()
@@ -70,42 +70,30 @@ local function isFruitInInventory(fruitName)
     return owned
 end
 
--- 5. XỬ LÝ LƯU TRỮ (CHỈ QUÉT BALO, BỎ QUA HOÀN TOÀN NHÂN VẬT ĐANG CẦM/DÙNG SKILL)
+-- 5. CẤT RƯƠNG TRỰC TIẾP TỪ BALO (KHÔNG CẦM LÊN TAY / KHÔNG BẤM BẤT KỲ Ô NÀO)
 local function processAndStoreFruits()
     pcall(function()
         local commF = getCommF()
         if not commF then return end
 
-        local char = LocalPlayer.Character
         local backpack = LocalPlayer:FindFirstChild("Backpack")
         if not backpack then return end
 
-        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-
-        -- CHỈ QUÉT CÁC ITEM THỰC SỰ NẰM TRONG BALO (BACKPACK)
-        -- Tuyệt đối không quét thư mục Character để tránh đụng vào skill/vũ khí đang cầm trên tay
+        -- CHỈ QUÉT NỘI BỘ THƯ MỤC BALO (BACKPACK)
         for _, tool in pairs(backpack:GetChildren()) do
             if tool:IsA("Tool") then
                 local name = tool.Name
                 
-                -- Kiểm tra xem có phải là Trái Ác Quỷ vật phẩm không (loại trừ tượng và skill)
-                if (name:find("Fruit") or tool.ToolTip == "Blox Fruit") and not name:find("Statue") then
+                -- Điều kiện: Tên chứa từ "Fruit" và là Blox Fruit thực sự (không phải Statue/Skill)
+                if (name:find("Fruit") or tool.ToolTip == "Blox Fruit") and not name:find("Statue") and not name:find("Power") then
                     
                     if not processedFruits[tool] then
-                        print("[Check] Tìm thấy trái trong balo: " .. name)
-
                         if isFruitInInventory(name) then
-                            print("[SKIP] Trái " .. name .. " đã có trong rương -> Bỏ qua!")
+                            print("[SKIP] Trái " .. name .. " đã có trong rương -> Đánh dấu bỏ qua!")
                             processedFruits[tool] = true
                         else
-                            print("[STORE] Đang cất trái: " .. name)
-                            
-                            -- Cầm tạm lên tay để gọi remote cất vào rương
-                            if humanoid then
-                                humanoid:EquipTool(tool)
-                                task.wait(0.3)
-                            end
-                            
+                            print("[STORE SILENT] Đang cất thẳng vào rương: " .. name)
+                            -- Gửi lệnh lưu trữ trực tiếp Instance của Tool trong Balo mà KHÔNG gọi EquipTool
                             commF:InvokeServer("StoreFruit", name, tool)
                             task.wait(0.5)
                         end
@@ -210,7 +198,7 @@ task.spawn(function()
     while task.wait(0.3) do
         if getgenv().AutoFruit then
             pcall(function()
-                -- Kiểm tra balo để cất trái mới nhặt, không đụng đến skill đang ăn trên người
+                -- Tự động cất ngầm trái trong balo
                 processAndStoreFruits()
 
                 local char = LocalPlayer.Character
@@ -234,6 +222,7 @@ task.spawn(function()
                         if currentTween then currentTween:Cancel() end
                         hrp.CFrame = targetCFrame
                         
+                        -- Chạm nhặt trái
                         if firetouchinterest and char:FindFirstChild("LeftFoot") then
                             firetouchinterest(char.LeftFoot, targetFruit, 0)
                             firetouchinterest(char.LeftFoot, targetFruit, 1)
