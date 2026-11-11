@@ -1,12 +1,13 @@
 -- ==========================================================
--- Blox Fruits Halloween Event Auto Script - Sửa Lỗi Đội Mũ & Melee Attack
+-- Blox Fruits Halloween Event Auto Script - Sửa Lỗi Triệt Để
+-- Hỗ trợ: Delta, Hydrogen, Codex | Auto Melee & Find Pumpkin
 -- ==========================================================
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -14,12 +15,12 @@ local LocalPlayer = Players.LocalPlayer
 getgenv().AutoPumpkin = true
 getgenv().TweenSpeed = 300
 
-print("[Halloween Script] Đã cập nhật sửa lỗi Player đội bí ngô & Kích hoạt đòn Melee!")
+print("[Halloween Script] Đã khởi động phiên bản sửa lỗi tương thích Delta!")
 
--- 1. Bật Noclip để bay xuyên địa hình không bị cản
+-- 1. Giữ Noclip xuyên địa hình liên tục
 RunService.Stepped:Connect(function()
     if getgenv().AutoPumpkin and LocalPlayer.Character then
-        for _, part in pairs(LocalPlayer.Character:GetChildren()) do
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
             if part:IsA("BasePart") then
                 part.CanCollide = false
             end
@@ -27,20 +28,20 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- 2. Tự động lấy và cầm Melee (Võ) trên tay
+-- 2. Tự động cầm Melee (Võ)
 local function equipMelee()
     local char = LocalPlayer.Character
     if not char then return nil end
-    
+
     local currentTool = char:FindFirstChildOfClass("Tool")
-    if currentTool and currentTool.ToolTip == "Melee" then
+    if currentTool and (currentTool.ToolTip == "Melee" or currentTool.ToolTip == "Sword") then
         return currentTool
     end
-    
+
     local backpack = LocalPlayer:FindFirstChild("Backpack")
     if backpack then
         for _, tool in pairs(backpack:GetChildren()) do
-            if tool:IsA("Tool") and tool.ToolTip == "Melee" then
+            if tool:IsA("Tool") and (tool.ToolTip == "Melee" or tool.ToolTip == "Sword") then
                 char.Humanoid:EquipTool(tool)
                 return tool
             end
@@ -49,51 +50,41 @@ local function equipMelee()
     return nil
 end
 
--- 3. Gửi lệnh kích hoạt đòn đánh thường Melee trực tiếp
-local function triggerMeleeAttack()
+-- 3. Kích hoạt đòn đánh thường mượt mà (Không bị Anti-cheat chặn)
+local function triggerAttack()
     pcall(function()
-        local melee = equipMelee()
-        if melee then
-            -- Kích hoạt công cụ Melee trực tiếp
-            melee:Activate()
-            
-            -- Gửi tín hiệu đánh thường qua RemoteEvent (Hỗ trợ tốt nhất cho Blox Fruits)
-            local netFolder = ReplicatedStorage:FindFirstChild("Modules") and ReplicatedStorage.Modules:FindFirstChild("Net")
-            if netFolder then
-                local registerAttack = netFolder:FindFirstChild("RE/RegisterAttack") or netFolder:FindFirstChild("RegisterAttack")
-                if registerAttack then
-                    registerAttack:FireServer()
-                end
-            end
+        local tool = equipMelee()
+        if tool then
+            tool:Activate()
         end
+        VirtualUser:CaptureController()
+        VirtualUser:Button1Down(Vector2.new(0,0))
     end)
 end
 
--- 4. Hàm lọc CHÍNH XÁC Pumpkin sự kiện (Loại bỏ triệt để Player đội mũ/phụ kiện bí ngô)
-local function getNearestRealPumpkin()
+-- 4. Hàm tìm chính xác Pumpkin trên toàn bản đồ (Loại bỏ triệt để Player & NPC)
+local function getNearestPumpkin()
     local nearest = nil
     local shortestDistance = math.huge
-    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
 
-    for _, obj in pairs(Workspace:GetChildren()) do
-        if obj.Name == "Pumpkin" then
-            -- Kiểm tra xem đối tượng có thuộc về Player nào không
-            local isPlayerAcc = false
+    -- Quét toàn bộ Descendants để không bỏ sót Pumpkin nằm trong Folder con
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj.Name == "Pumpkin" or obj.Name == "PumpkinModel" then
+            -- Bỏ qua nếu thuộc về Player hoặc NPC
+            local isModelPlayer = false
+            local ancestorModel = obj:FindFirstAncestorOfClass("Model")
             
-            -- 1. Nếu là con hoặc cháu của một Character
-            if obj:FindFirstAncestorOfClass("Model") and Players:GetPlayerFromCharacter(obj:FindFirstAncestorOfClass("Model")) then
-                isPlayerAcc = true
-            end
-            
-            -- 2. Nếu chứa Humanoid (NPC hoặc Player)
-            if obj:FindFirstChildOfClass("Humanoid") then
-                isPlayerAcc = true
+            if ancestorModel then
+                if Players:GetPlayerFromCharacter(ancestorModel) or ancestorModel:FindFirstChildOfClass("Humanoid") then
+                    isModelPlayer = true
+                end
             end
 
-            -- Chỉ chọn nếu ĐÚNG LÀ Pumpkin sự kiện tự do trên bản đồ
-            if not isPlayerAcc then
-                local part = obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")) or (obj:IsA("BasePart") and obj)
+            if not isModelPlayer then
+                local part = obj:IsA("BasePart") and obj or (obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")))
                 if part and part.Parent then
                     local dist = (hrp.Position - part.Position).Magnitude
                     if dist < shortestDistance then
@@ -107,52 +98,51 @@ local function getNearestRealPumpkin()
     return nearest
 end
 
--- 5. Vòng lặp kích hoạt đánh Melee siêu nhanh
+-- 5. Vòng lặp Auto Attack (Chạy liên tục)
 task.spawn(function()
     while true do
-        task.wait(0.01) -- Độ trễ cực nhỏ cho tốc độ xả đòn Melee
+        task.wait(0.1)
         if getgenv().AutoPumpkin then
-            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            local pumpkin = getNearestRealPumpkin()
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local pumpkin = getNearestPumpkin()
             if hrp and pumpkin then
                 local distance = (hrp.Position - pumpkin.Position).Magnitude
-                if distance <= 15 then
-                    triggerMeleeAttack()
+                if distance <= 25 then
+                    triggerAttack()
                 end
             end
         end
     end
 end)
 
--- 6. Vòng lặp Tween di chuyển đến Pumpkin
+-- 6. Luồng di chuyển (Tween Bay)
+local currentTween = nil
 task.spawn(function()
-    while task.wait(0.1) do
+    while task.wait(0.2) do
         if getgenv().AutoPumpkin then
             pcall(function()
                 local char = LocalPlayer.Character
                 if not char or not char:FindFirstChild("HumanoidRootPart") then return end
                 local hrp = char.HumanoidRootPart
 
-                local pumpkin = getNearestRealPumpkin()
+                local pumpkin = getNearestPumpkin()
                 if pumpkin and pumpkin.Parent then
                     local distance = (hrp.Position - pumpkin.Position).Magnitude
-                    
+
                     if distance > 10 then
+                        if currentTween then currentTween:Cancel() end
+                        
                         local timeTravel = distance / getgenv().TweenSpeed
                         local tweenInfo = TweenInfo.new(timeTravel, Enum.EasingStyle.Linear)
-                        local tween = TweenService:Create(hrp, tweenInfo, {CFrame = pumpkin.CFrame * CFrame.new(0, 2, 0)})
-                        tween:Play()
-
-                        while tween.PlaybackState == Enum.PlaybackState.Playing do
-                            if not pumpkin or not pumpkin.Parent then
-                                tween:Cancel()
-                                break
-                            end
-                            task.wait(0.05)
-                        end
+                        currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = pumpkin.CFrame * CFrame.new(0, 3, 0)})
+                        currentTween:Play()
                     else
-                        hrp.CFrame = pumpkin.CFrame * CFrame.new(0, 2, 0)
+                        if currentTween then currentTween:Cancel() end
+                        hrp.CFrame = pumpkin.CFrame * CFrame.new(0, 3, 0)
                     end
+                else
+                    if currentTween then currentTween:Cancel() end
                 end
             end)
         end
