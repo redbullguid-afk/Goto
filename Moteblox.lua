@@ -1,6 +1,6 @@
 -- ==========================================================
--- Blox Fruits Halloween Script - Auto Team (Pirates) & Auto Pumpkin
--- Hỗ trợ: Delta Executor | Tự động chọn Hải Tặc + Fast Attack + Noclip
+-- Blox Fruits Halloween Script - Quét Jack O' & Khóa Bay Lơ Lửng
+-- Hỗ trợ: Delta Executor | Chống Rơi 100% + Auto Team + Fast Attack
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -15,36 +15,63 @@ local LocalPlayer = Players.LocalPlayer
 getgenv().AutoPumpkin = true
 getgenv().TweenSpeed = 300
 
-print("[Halloween Script] Đã khởi động: Auto Chọn Hải Tặc + Săn Bí Ngô!")
+print("[Halloween Script] Đã kích hoạt hệ thống Lơ Lửng + Quét Jack O' Chuẩn!")
 
--- 1. TỰ ĐỘNG CHỌN PHE HẢI TẶC (PIRATES) KHI VỪA VÀO SERVER
+-- 1. Tự động chọn phe Hải Tặc
 local function autoSelectPirates()
     pcall(function()
-        -- Gửi Remote chọn phe Hải Tặc trực tiếp đến Server
         local commF = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_")
         if commF then
             commF:InvokeServer("SetTeam", "Pirates")
         end
     end)
 end
-
--- Gọi chọn phe ngay lập tức khi chạy script
 autoSelectPirates()
 
--- 2. Noclip xuyên địa hình giúp bay không bị cản
+-- 2. Hệ thống Noclip & ĐÓNG BĂNG LƠ LỬNG TRÊN KHÔNG (Chống Rơi 100%)
+local hoverVelocity = nil
+
 RunService.Stepped:Connect(function()
     if getgenv().AutoPumpkin and LocalPlayer.Character then
         pcall(function()
-            for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.CanCollide = false
+            local char = LocalPlayer.Character
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+
+            if char and hrp then
+                -- Vô hiệu hóa va chạm với địa hình
+                for _, part in pairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
                 end
+
+                -- Khóa trọng lực để nhân vật giữ nguyên độ cao lơ lửng
+                if not hrp:FindFirstChild("PumpkinHoverForce") then
+                    hoverVelocity = Instance.new("BodyVelocity")
+                    hoverVelocity.Name = "PumpkinHoverForce"
+                    hoverVelocity.Velocity = Vector3.new(0, 0, 0)
+                    hoverVelocity.MaxForce = Vector3.new(0, math.huge, 0)
+                    hoverVelocity.Parent = hrp
+                end
+
+                if humanoid then
+                    humanoid.PlatformStand = true -- Tránh hoạt ảnh té ngã/rơi
+                end
+            end
+        end)
+    else
+        -- Xóa khóa trọng lực khi tắt script
+        pcall(function()
+            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if hrp and hrp:FindFirstChild("PumpkinHoverForce") then
+                hrp.PumpkinHoverForce:Destroy()
             end
         end)
     end
 end)
 
--- 3. Tự động Quét và Cầm vũ khí cận chiến (Melee / Sword)
+-- 3. Tự động trang bị Melee / Sword
 local function autoScanAndEquipWeapon()
     local char = LocalPlayer.Character
     if not char then return nil end
@@ -74,7 +101,7 @@ local function autoScanAndEquipWeapon()
     return nil
 end
 
--- 4. Kích hoạt đòn đánh thường liên tục
+-- 4. Kích hoạt đòn đánh nhanh (Fast Attack)
 local function forceAttack()
     pcall(function()
         local tool = autoScanAndEquipWeapon()
@@ -96,7 +123,47 @@ local function forceAttack()
     end)
 end
 
--- 5. Quét lọc vị trí Pumpkin thật (Không nhầm Player/NPC)
+-- 5. QUÉT CHUẨN XÁC QUÁI JACK O' (Quét siêu rộng không bị lỗi)
+local function getActiveJackMob()
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+
+    local nearestMob = nil
+    local shortestDist = 150 -- Bán kính phát hiện quái Jack xung quanh
+
+    pcall(function()
+        -- Lọc trong thư mục Enemies và Workspace
+        local searchFolders = {Workspace:FindFirstChild("Enemies"), Workspace}
+        
+        for _, folder in pairs(searchFolders) do
+            if folder then
+                for _, enemy in pairs(folder:GetChildren()) do
+                    if enemy:IsA("Model") then
+                        local name = enemy.Name:lower()
+                        -- Nhận diện các từ khóa của quái Jack O'
+                        if name:find("jack") or name:find("lantern") or name:find("halloween") then
+                            local humanoid = enemy:FindFirstChildOfClass("Humanoid")
+                            local enemyHrp = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart
+                            
+                            if humanoid and enemyHrp and humanoid.Health > 0 then
+                                local dist = (hrp.Position - enemyHrp.Position).Magnitude
+                                if dist < shortestDist then
+                                    shortestDist = dist
+                                    nearestMob = enemyHrp
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    
+    return nearestMob
+end
+
+-- 6. Quét lọc vị trí Pumpkin chuẩn
 local function scanMapForPumpkin()
     local nearest = nil
     local shortestDistance = math.huge
@@ -133,7 +200,7 @@ local function scanMapForPumpkin()
     return nearest
 end
 
--- 6. Luồng Tấn công xả đòn
+-- 7. Luồng Tấn công (Ưu tiên diệt quái Jack O' trước)
 task.spawn(function()
     while true do
         task.wait(0.05)
@@ -141,11 +208,18 @@ task.spawn(function()
             pcall(function()
                 local char = LocalPlayer.Character
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                local pumpkin = scanMapForPumpkin()
-                
-                if hrp and pumpkin then
-                    local distance = (hrp.Position - pumpkin.Position).Magnitude
-                    if distance <= 20 then
+                if not hrp then return end
+
+                local jackMob = getActiveJackMob()
+                if jackMob then
+                    -- Nếu phát hiện quái Jack O', giữ khoảng cách lơ lửng và xả đòn
+                    if (hrp.Position - jackMob.Position).Magnitude <= 30 then
+                        forceAttack()
+                    end
+                else
+                    -- Nếu không có quái, tiếp tục đánh Pumpkin
+                    local pumpkin = scanMapForPumpkin()
+                    if pumpkin and (hrp.Position - pumpkin.Position).Magnitude <= 20 then
                         forceAttack()
                     end
                 end
@@ -154,7 +228,7 @@ task.spawn(function()
     end
 end)
 
--- 7. Luồng Bay (Tween) đến Bí Ngô
+-- 8. Luồng Bay (Tween) Lơ Lửng
 task.spawn(function()
     local currentTween = nil
     
@@ -163,26 +237,38 @@ task.spawn(function()
             pcall(function()
                 local char = LocalPlayer.Character
                 if not char or not char:FindFirstChild("HumanoidRootPart") then
-                    -- Nếu chưa load xong nhân vật (đang ở màn hình chọn phe), gửi lại lệnh chọn phe
                     autoSelectPirates()
                     return
                 end
                 local hrp = char.HumanoidRootPart
 
-                local pumpkin = scanMapForPumpkin()
-                if pumpkin and pumpkin.Parent then
-                    local distance = (hrp.Position - pumpkin.Position).Magnitude
+                -- Ưu tiên 1: Bay đến quái Jack O' và lơ lửng trên đầu quái 6 studs
+                local targetPart = getActiveJackMob()
+                local targetCFrame = nil
 
-                    if distance > 6 then
+                if targetPart then
+                    targetCFrame = targetPart.CFrame * CFrame.new(0, 6, 0)
+                else
+                    -- Ưu tiên 2: Bay đến Pumpkin lơ lửng phía trên 3 studs
+                    local pumpkin = scanMapForPumpkin()
+                    if pumpkin then
+                        targetCFrame = pumpkin.CFrame * CFrame.new(0, 3, 0)
+                    end
+                end
+
+                if targetCFrame then
+                    local distance = (hrp.Position - targetCFrame.Position).Magnitude
+
+                    if distance > 5 then
                         if currentTween then currentTween:Cancel() end
                         
                         local timeTravel = distance / getgenv().TweenSpeed
                         local tweenInfo = TweenInfo.new(timeTravel, Enum.EasingStyle.Linear)
-                        currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = pumpkin.CFrame * CFrame.new(0, 2, 0)})
+                        currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
                         currentTween:Play()
                     else
                         if currentTween then currentTween:Cancel() end
-                        hrp.CFrame = pumpkin.CFrame * CFrame.new(0, 2, 0)
+                        hrp.CFrame = targetCFrame
                     end
                 else
                     if currentTween then currentTween:Cancel() end
