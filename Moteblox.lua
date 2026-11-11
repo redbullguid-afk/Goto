@@ -1,6 +1,6 @@
 -- ==========================================================
--- Blox Fruits - Auto Fruit Finder, Auto Store & Server Hop (5s)
--- Phiên bản đầy đủ hoàn chỉnh không bị cắt cụt
+-- Blox Fruits - Auto Fruit Finder & Store (Fix Triệt Để Lỗi Bay Vào Tượng)
+-- Hỗ trợ: Delta Executor | Auto Store, Skip Owned Fruit, Server Hop 5s
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -18,7 +18,7 @@ getgenv().TweenSpeed = 250
 
 local noFruitTime = 0
 
-print("[Fruit Finder] Khởi động script thành công! Đang quét trái ác quỷ...")
+print("[Fruit Finder] Khởi động script chống bay vào tượng thành công!")
 
 -- 1. QUEUE ON TELEPORT AN TOÀN
 pcall(function()
@@ -73,7 +73,7 @@ local function isFruitOwned(fruitName)
     return owned
 end
 
--- 5. Tự động cất trái vào kho (Đã bổ sung đầy đủ không bị cắt)
+-- 5. Tự động cất trái vào kho
 local function autoStoreFruit()
     pcall(function()
         local commF = getCommF()
@@ -109,9 +109,9 @@ local function autoStoreFruit()
     end)
 end
 
--- 6. Server Hop 5s
+-- 6. Server Hop 5s nếu không thấy trái
 local function serverHop()
-    print("[Server Hop] Không có Trái Ác Quỷ mới trong 5s. Đang đổi server...")
+    print("[Server Hop] Không tìm thấy Trái Ác Quỷ mới trong 5s. Đang đổi server...")
     pcall(function()
         local placeId = game.PlaceId
         local servers = {}
@@ -163,7 +163,7 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- 8. BỘ LỌC CHUẨN XÁC: LOẠI BỎ BỨC TƯỢNG, NPC VÀ TRÁI ĐÃ ĂN
+-- 8. BỘ LỌC CHUẨN XÁC: LOẠI BỎ HOÀN TOÀN BỨC TƯỢNG, QUEST, PEDESTAL
 local function getTargetFruit()
     local nearest = nil
     local shortestDistance = math.huge
@@ -176,10 +176,12 @@ local function getTargetFruit()
             if (obj:IsA("Tool") or obj:IsA("Model")) and obj.Name:find("Fruit") then
                 local name = obj.Name:lower()
                 
-                local isStatueOrQuest = name:find("statue") or name:find("quest") or name:find("pedestal") or name:find("npc")
+                -- SIẾT CHẶT ĐIỀU KIỆN LỌC: BỎ QUA TƯỢNG, BỆ ĐỨNG, NHIỆM VỤ, NPC
+                local isStatueOrQuest = name:find("statue") or name:find("quest") or name:find("pedestal") or name:find("npc") or name:find("monument") or name:find("temple")
                 local isInsideCharacter = obj:FindFirstAncestorOfClass("Model") and Players:GetPlayerFromCharacter(obj:FindFirstAncestorOfClass("Model"))
                 
                 if not isStatueOrQuest and not isInsideCharacter then
+                    -- Kiểm tra trái chưa có trong rương
                     if not isFruitOwned(obj.Name) then
                         local handle = obj:FindFirstChild("Handle") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
                         if handle then
@@ -251,7 +253,7 @@ task.spawn(function()
                 else
                     if currentTween then currentTween:Cancel() end
                     noFruitTime = noFruitTime + 0.3
-                    print("[Fruit Finder] Đang tìm Trái Ác Quỷ thực sự dưới đất: " .. math.floor(noFruitTime) .. "/5s")
+                    print("[Fruit Finder] Đang quét tìm Trái Ác Quỷ thực tế dưới đất: " .. math.floor(noFruitTime) .. "/5s")
 
                     if noFruitTime >= 5 then
                         serverHop()
