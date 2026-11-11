@@ -1,6 +1,6 @@
 -- ==========================================================
--- Blox Fruits Halloween Special - Săn Bí Ngô Người Tuyết & Server Hop (5s)
--- Tính năng: Lọc bỏ Jack O' Lantern, Chống rơi lơ lửng, Auto Hop Server
+-- Blox Fruits Halloween Special - Auto Bí Ngô + Server Hop (5s) + Auto Re-execute
+-- Tính năng: Tự động chạy lại script khi đổi server, Lọc Người Tuyết, Lơ lửng chống rơi
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -19,9 +19,21 @@ getgenv().TweenSpeed = 300
 
 local noTargetTime = 0 -- Bộ đếm thời gian không tìm thấy mục tiêu
 
-print("[Halloween Special] Đã kích hoạt Script Săn Bí Ngô Người Tuyết + Server Hop (5s)!")
+print("[Halloween Special] Đã kích hoạt Script Săn Bí Ngô Người Tuyết + Server Hop + Auto Re-execute!")
 
--- 1. Tự động chọn phe Hải Tặc khi vào game
+-- 1. TỰ ĐỘNG GHI NHỚ VÀ CHẠY LẠI SCRIPT KHI ĐỔI SERVER (QUEUE ON TELEPORT)
+local queueOnTeleport = syn and syn.queue_on_teleport or queue_on_teleport or fluxus and fluxus.queue_on_teleport or qut
+if queueOnTeleport then
+    pcall(function()
+        queueOnTeleport([[
+            -- Script sẽ tự động chạy lại ngay khi vào server mới
+            task.wait(3) -- Chờ load game ổn định
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/redbullguid-afk/Goto/main/Moteblox.lua"))() -- Hoặc chạy lại chính mã nguồn này
+        ]])
+    end)
+end
+
+-- 2. Tự động chọn phe Hải Tặc khi vào game
 local function autoSelectPirates()
     pcall(function()
         local commF = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_")
@@ -32,7 +44,7 @@ local function autoSelectPirates()
 end
 autoSelectPirates()
 
--- 2. Hàm Server Hop (Đổi server tự động)
+-- 3. Hàm Server Hop (Đổi server tự động và tự động kích hoạt queue_on_teleport)
 local function serverHop()
     print("[Server Hop] Không thấy Bí Ngô Người Tuyết trong 5s. Đang đổi server...")
     pcall(function()
@@ -57,7 +69,7 @@ local function serverHop()
     end)
 end
 
--- 3. Hệ thống Noclip & Khóa trọng lực Lơ Lửng (Anti-Fall)
+-- 4. Hệ thống Noclip & Khóa trọng lực Lơ Lửng (Anti-Fall)
 RunService.Stepped:Connect(function()
     if getgenv().AutoSpecialPumpkin and LocalPlayer.Character then
         pcall(function()
@@ -88,7 +100,7 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- 4. Tự động trang bị vũ khí Melee / Sword
+-- 5. Tự động trang bị vũ khí Melee / Sword
 local function autoScanAndEquipWeapon()
     local char = LocalPlayer.Character
     if not char then return nil end
@@ -116,7 +128,7 @@ local function autoScanAndEquipWeapon()
     return nil
 end
 
--- 5. Kích hoạt Fast Attack
+-- 6. Kích hoạt Fast Attack
 local function forceAttack()
     pcall(function()
         local tool = autoScanAndEquipWeapon()
@@ -134,7 +146,7 @@ local function forceAttack()
     end)
 end
 
--- 6. HÀM QUÉT: Lọc bỏ triệt để Jack O' Lantern & Chỉ lấy Người Tuyết Bí Ngô
+-- 7. HÀM QUÉT: Lọc bỏ triệt để Jack O' Lantern & Chỉ lấy Người Tuyết Bí Ngô
 local function getSpecialPumpkinTarget()
     local nearest = nil
     local shortestDistance = math.huge
@@ -180,7 +192,7 @@ local function getSpecialPumpkinTarget()
     return nearest
 end
 
--- 7. Luồng Tấn Công
+-- 8. Luồng Tấn Công
 task.spawn(function()
     while true do
         task.wait(0.05)
@@ -202,7 +214,7 @@ task.spawn(function()
     end
 end)
 
--- 8. Luồng Bay (Tween) & Kiểm Soát Server Hop (5 Giây)
+-- 9. Luồng Bay (Tween) & Kiểm Soát Server Hop (5 Giây)
 task.spawn(function()
     local currentTween = nil
     
