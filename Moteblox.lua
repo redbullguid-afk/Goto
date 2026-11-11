@@ -1,6 +1,6 @@
 -- ==========================================================
--- Blox Fruits Halloween - Script Săn Boss/Người Tuyết Bí Ngô Đặc Biệt
--- Tính năng: Lọc bí ngô đặc biệt, Chống rơi lơ lửng, Fast Attack, Auto Team
+-- Blox Fruits Halloween Special - Săn Bí Ngô Người Tuyết & Server Hop (5s)
+-- Tính năng: Lọc bỏ Jack O' Lantern, Chống rơi lơ lửng, Auto Hop Server
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -9,13 +9,17 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
 
 local LocalPlayer = Players.LocalPlayer
 
 getgenv().AutoSpecialPumpkin = true
 getgenv().TweenSpeed = 300
 
-print("[Halloween Special] Đã khởi động script săn Người Tuyết Bí Ngô đặc biệt!")
+local noTargetTime = 0 -- Bộ đếm thời gian không tìm thấy mục tiêu
+
+print("[Halloween Special] Đã kích hoạt Script Săn Bí Ngô Người Tuyết + Server Hop (5s)!")
 
 -- 1. Tự động chọn phe Hải Tặc khi vào game
 local function autoSelectPirates()
@@ -28,7 +32,32 @@ local function autoSelectPirates()
 end
 autoSelectPirates()
 
--- 2. Hệ thống Noclip & Đóng băng lơ lửng chống rơi (Hover)
+-- 2. Hàm Server Hop (Đổi server tự động)
+local function serverHop()
+    print("[Server Hop] Không thấy Bí Ngô Người Tuyết trong 5s. Đang đổi server...")
+    pcall(function()
+        local placeId = game.PlaceId
+        local servers = {}
+        local req = game:HttpGet("https://games.roblox.com/v1/games/" .. placeId .. "/servers/0?sortOrder=Asc&limit=100")
+        local data = HttpService:JSONDecode(req)
+        
+        if data and data.data then
+            for _, v in pairs(data.data) do
+                if v.playing ~= v.maxPlayers and v.id ~= game.JobId then
+                    table.insert(servers, v.id)
+                end
+            end
+        end
+        
+        if #servers > 0 then
+            TeleportService:TeleportToPlaceInstance(placeId, servers[math.random(1, #servers)], LocalPlayer)
+        else
+            TeleportService:Teleport(placeId, LocalPlayer)
+        end
+    end)
+end
+
+-- 3. Hệ thống Noclip & Khóa trọng lực Lơ Lửng (Anti-Fall)
 RunService.Stepped:Connect(function()
     if getgenv().AutoSpecialPumpkin and LocalPlayer.Character then
         pcall(function()
@@ -56,17 +85,10 @@ RunService.Stepped:Connect(function()
                 end
             end
         end)
-    else
-        pcall(function()
-            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if hrp and hrp:FindFirstChild("SpecialHoverForce") then
-                hrp.SpecialHoverForce:Destroy()
-            end
-        end)
     end
 end)
 
--- 3. Tự động trang bị vũ khí Melee / Sword
+-- 4. Tự động trang bị vũ khí Melee / Sword
 local function autoScanAndEquipWeapon()
     local char = LocalPlayer.Character
     if not char then return nil end
@@ -94,7 +116,7 @@ local function autoScanAndEquipWeapon()
     return nil
 end
 
--- 4. Kích hoạt Fast Attack liên tục
+-- 5. Kích hoạt Fast Attack
 local function forceAttack()
     pcall(function()
         local tool = autoScanAndEquipWeapon()
@@ -112,7 +134,7 @@ local function forceAttack()
     end)
 end
 
--- 5. HÀM QUÉT ĐẶC BIỆT: Tìm "Người tuyết bí ngô" (Boss / Model có Humanoid hoặc nhiều tầng)
+-- 6. HÀM QUÉT: Lọc bỏ triệt để Jack O' Lantern & Chỉ lấy Người Tuyết Bí Ngô
 local function getSpecialPumpkinTarget()
     local nearest = nil
     local shortestDistance = math.huge
@@ -121,7 +143,6 @@ local function getSpecialPumpkinTarget()
     if not hrp then return nil end
 
     pcall(function()
-        -- Quét trong thư mục Enemies hoặc toàn bộ Workspace tìm đối tượng có dạng Boss/Mob đặc biệt
         local searchFolders = {Workspace:FindFirstChild("Enemies"), Workspace}
         
         for _, folder in pairs(searchFolders) do
@@ -129,16 +150,20 @@ local function getSpecialPumpkinTarget()
                 for _, obj in pairs(folder:GetChildren()) do
                     if obj:IsA("Model") then
                         local name = obj.Name:lower()
-                        local humanoid = obj:FindFirstChildOfClass("Humanoid")
-                        local primaryPart = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                        
+                        -- LOẠI BỎ TRIỆT ĐỂ JACK O' LANTERN HOẶC PLAYER
+                        local isJack = name:find("jack") or name:find("lantern")
+                        local isPlayer = Players:GetPlayerFromCharacter(obj)
 
-                        -- Nhận diện dựa trên tên sự kiện hoặc việc đối tượng có thanh máu (Humanoid) và từ khóa liên quan đến Pumpkin/Boss/Giant
-                        local isSpecial = (name:find("pumpkin") or name:find("snowman") or name:find("boss") or name:find("jack")) 
-                                          and humanoid and humanoid.Health > 0
+                        if not isJack and not isPlayer then
+                            local humanoid = obj:FindFirstChildOfClass("Humanoid")
+                            local primaryPart = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
 
-                        -- Hoặc nhận diện nếu model có nhiều phần xếp chồng (giống hình người tuyết) nhưng không phải Player
-                        if not Players:GetPlayerFromCharacter(obj) and (isSpecial or (humanoid and obj:GetChildren() >= 10)) then
-                            if primaryPart then
+                            -- Nhận diện Người tuyết bí ngô (Snowman / Stack / Giant / Model có Humanoid)
+                            local isSpecialPumpkin = (name:find("snowman") or name:find("pumpkin") or name:find("stack") or name:find("boss")) 
+                                                      and humanoid and humanoid.Health > 0
+
+                            if isSpecialPumpkin and primaryPart then
                                 local dist = (hrp.Position - primaryPart.Position).Magnitude
                                 if dist < shortestDistance then
                                     shortestDistance = dist
@@ -155,7 +180,7 @@ local function getSpecialPumpkinTarget()
     return nearest
 end
 
--- 6. Luồng Tấn công mục tiêu đặc biệt
+-- 7. Luồng Tấn Công
 task.spawn(function()
     while true do
         task.wait(0.05)
@@ -177,11 +202,11 @@ task.spawn(function()
     end
 end)
 
--- 7. Luồng Bay (Tween) đến mục tiêu
+-- 8. Luồng Bay (Tween) & Kiểm Soát Server Hop (5 Giây)
 task.spawn(function()
     local currentTween = nil
     
-    while task.wait(0.15) do
+    while task.wait(0.5) do
         if getgenv().AutoSpecialPumpkin then
             pcall(function()
                 local char = LocalPlayer.Character
@@ -193,12 +218,14 @@ task.spawn(function()
 
                 local target = getSpecialPumpkinTarget()
                 if target and target.Parent then
-                    local targetCFrame = target.CFrame * CFrame.new(0, 5, 0) -- Lơ lửng phía trên 5 studs
+                    -- Tìm thấy mục tiêu -> Reset thời gian đếm Server Hop
+                    noTargetTime = 0
+                    
+                    local targetCFrame = target.CFrame * CFrame.new(0, 5, 0)
                     local distance = (hrp.Position - targetCFrame.Position).Magnitude
 
                     if distance > 6 then
                         if currentTween then currentTween:Cancel() end
-                        
                         local timeTravel = distance / getgenv().TweenSpeed
                         local tweenInfo = TweenInfo.new(timeTravel, Enum.EasingStyle.Linear)
                         currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
@@ -208,11 +235,17 @@ task.spawn(function()
                         hrp.CFrame = targetCFrame
                     end
                 else
+                    -- Không tìm thấy mục tiêu -> Cộng dồn thời gian đếm
                     if currentTween then currentTween:Cancel() end
+                    noTargetTime = noTargetTime + 0.5
+                    print("[Server Hop Tracker] Không có mục tiêu: " .. noTargetTime .. "/5 giây")
+
+                    -- Đủ 5 giây không thấy mục tiêu -> Tự động Hop Server
+                    if noTargetTime >= 5 then
+                        serverHop()
+                    end
                 end
             end)
-        else
-            if currentTween then currentTween:Cancel() end
         end
     end
 end)
