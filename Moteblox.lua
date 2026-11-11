@@ -1,6 +1,6 @@
 -- ==========================================================
--- Blox Fruits - Auto Fruit Finder, Auto Store & Server Hop (5s)
--- Feature: Auto Fly, Pick Up, Store Fruit, Skip Owned Fruit, Noclip & Anti-Fall
+-- Blox Fruits - Auto Fruit Finder, Auto Store & Smooth Fly (Fix Rubberband)
+-- Feature: Fly Smooth No-Lag, Auto Pick & Store Fruit, Skip Owned, Server Hop 5s
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -14,12 +14,12 @@ local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 
 getgenv().AutoFruit = true
-getgenv().TweenSpeed = 300
+getgenv().TweenSpeed = 250 -- Tốc độ bay an toàn chống giật lùi
 
 local noFruitTime = 0
 local CommF = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
 
-print("[Fruit Finder] Đã khởi động Script Auto Tìm & Lưu Trái Ác Quỷ!")
+print("[Fruit Finder] Đã cập nhật Fix giật bay & Auto Store chuẩn!")
 
 -- 1. QUEUE ON TELEPORT (Tự động kích hoạt lại khi đổi server)
 local queueOnTeleport = syn and syn.queue_on_teleport or queue_on_teleport or fluxus and fluxus.queue_on_teleport or qut
@@ -57,32 +57,44 @@ local function isFruitOwned(fruitName)
     return owned
 end
 
--- 4. Tự động Lưu Trái Ác Quỷ vào Kho
+-- 4. TỰ ĐỘNG LƯU TRÁI ÁC QUỶ VÀO KHO (FIX HOÀN CHỈNH)
 local function autoStoreFruit()
     pcall(function()
         local char = LocalPlayer.Character
         local backpack = LocalPlayer:FindFirstChild("Backpack")
         
-        local function checkAndStore(tool)
-            if tool and tool:IsA("Tool") and tool.Name:find("Fruit") then
+        local function storeTool(tool)
+            if tool and tool:IsA("Tool") and (tool.Name:find("Fruit") or tool.ToolTip == "Blox Fruit") then
                 local fruitName = tool.Name
-                print("[Auto Store] Đang cất trái: " .. fruitName)
+                print("[Auto Store] Đang lưu cất trái: " .. fruitName)
+                
+                -- Cầm trái lên tay nếu đang ở trong Balo
+                if tool.Parent == backpack and char and char:FindFirstChildOfClass("Humanoid") then
+                    char.Humanoid:EquipTool(tool)
+                    task.wait(0.2)
+                end
+                
+                -- Gửi lệnh cất vào kho
                 CommF:InvokeServer("StoreFruit", fruitName, tool)
             end
         end
 
         if char then
-            for _, tool in pairs(char:GetChildren()) do checkAndStore(tool) end
+            for _, tool in pairs(char:GetChildren()) do
+                if tool:IsA("Tool") then storeTool(tool) end
+            end
         end
         if backpack then
-            for _, tool in pairs(backpack:GetChildren()) do checkAndStore(tool) end
+            for _, tool in pairs(backpack:GetChildren()) do
+                if tool:IsA("Tool") then storeTool(tool) end
+            end
         end
     end)
 end
 
--- 5. Hàm Server Hop tự động
+-- 5. Server Hop 5s
 local function serverHop()
-    print("[Server Hop] Không có Trái Ác Quỷ phù hợp trong 5s. Đang đổi server...")
+    print("[Server Hop] Không có Trái Ác Quỷ mới trong 5s. Đang đổi server...")
     pcall(function()
         local placeId = game.PlaceId
         local servers = {}
@@ -105,20 +117,24 @@ local function serverHop()
     end)
 end
 
--- 6. Noclip & Giữ lơ lửng chống rơi
+-- 6. TỐI ƯU TRẠNG THÁI BAY (FIX LỖI GIẬT LÙI / RUBBERBAND 100%)
 RunService.Stepped:Connect(function()
     if getgenv().AutoFruit and LocalPlayer.Character then
         pcall(function()
             local char = LocalPlayer.Character
             local hrp = char:FindFirstChild("HumanoidRootPart")
-            local humanoid = char:FindFirstChildOfClass("Humanoid")
 
             if char and hrp then
+                -- Vô hiệu hóa va chạm
                 for _, part in pairs(char:GetDescendants()) do
                     if part:IsA("BasePart") then
                         part.CanCollide = false
                     end
                 end
+
+                -- Xóa bỏ hoàn toàn vận tốc rơi gây giật lag
+                hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
 
                 if not hrp:FindFirstChild("FruitHoverForce") then
                     local hover = Instance.new("BodyVelocity")
@@ -127,16 +143,12 @@ RunService.Stepped:Connect(function()
                     hover.MaxForce = Vector3.new(0, math.huge, 0)
                     hover.Parent = hrp
                 end
-
-                if humanoid then
-                    humanoid.PlatformStand = true
-                end
             end
         end)
     end
 end)
 
--- 7. HÀM QUÉT VÀ LỌC TRÁI ÁC QUỶ TRÊN BẢN ĐỒ
+-- 7. QUÉT TRÁI ÁC QUỶ TRÊN BẢN ĐỒ
 local function getTargetFruit()
     local nearest = nil
     local shortestDistance = math.huge
@@ -146,11 +158,9 @@ local function getTargetFruit()
 
     pcall(function()
         for _, obj in pairs(Workspace:GetChildren()) do
-            -- Kiểm tra vật thể là Trái Ác Quỷ (Tool/Model chứa từ 'Fruit')
             if (obj:IsA("Tool") or obj:IsA("Model")) and obj.Name:find("Fruit") then
                 local fruitName = obj.Name
                 
-                -- Bỏ qua nếu trái này người chơi đã sở hữu trong kho
                 if not isFruitOwned(fruitName) then
                     local handle = obj:FindFirstChild("Handle") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
                     if handle then
@@ -168,14 +178,13 @@ local function getTargetFruit()
     return nearest
 end
 
--- 8. Luồng Bay (Tween), Tương tác nhặt & Server Hop (5s)
+-- 8. LUỒNG BAY (TWEEN) MƯỢT MÀ & NHẶT TRÁI
 task.spawn(function()
     local currentTween = nil
     
-    while task.wait(0.5) do
+    while task.wait(0.3) do
         if getgenv().AutoFruit then
             pcall(function()
-                -- Thử cất trái nếu đang cầm trên tay hoặc trong Balo
                 autoStoreFruit()
 
                 local char = LocalPlayer.Character
@@ -187,13 +196,14 @@ task.spawn(function()
 
                 local targetFruit = getTargetFruit()
                 if targetFruit and targetFruit.Parent then
-                    noFruitTime = 0 -- Reset thời gian đếm khi phát hiện trái
+                    noFruitTime = 0
                     
                     local targetCFrame = targetFruit.CFrame
                     local distance = (hrp.Position - targetCFrame.Position).Magnitude
 
-                    if distance > 3 then
+                    if distance > 4 then
                         if currentTween then currentTween:Cancel() end
+                        
                         local timeTravel = distance / getgenv().TweenSpeed
                         local tweenInfo = TweenInfo.new(timeTravel, Enum.EasingStyle.Linear)
                         currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
@@ -202,7 +212,13 @@ task.spawn(function()
                         if currentTween then currentTween:Cancel() end
                         hrp.CFrame = targetCFrame
                         
-                        -- Tương tác nhặt trái (ProximityPrompt hoặc Touch)
+                        -- Chạm trực tiếp để nhặt item vào túi
+                        if firetouchinterest and char:FindFirstChild("LeftFoot") then
+                            firetouchinterest(char.LeftFoot, targetFruit, 0)
+                            firetouchinterest(char.LeftFoot, targetFruit, 1)
+                        end
+                        
+                        -- Kích hoạt ProximityPrompt nếu có
                         local parentObj = targetFruit.Parent
                         if parentObj then
                             for _, prompt in pairs(parentObj:GetDescendants()) do
@@ -211,13 +227,14 @@ task.spawn(function()
                                 end
                             end
                         end
+                        
                         task.wait(0.5)
                         autoStoreFruit()
                     end
                 else
                     if currentTween then currentTween:Cancel() end
-                    noFruitTime = noFruitTime + 0.5
-                    print("[Fruit Finder] Không tìm thấy trái mới: " .. noFruitTime .. "/5s")
+                    noFruitTime = noFruitTime + 0.3
+                    print("[Fruit Finder] Đang tìm trái mới: " .. math.floor(noFruitTime) .. "/5s")
 
                     if noFruitTime >= 5 then
                         serverHop()
