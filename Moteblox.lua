@@ -1,34 +1,65 @@
 -- ==========================================================
--- Blox Fruits Halloween Event Auto Script - Phần 1
--- Tính năng: Auto ESP Pumpkin, Tween Bay, Auto Attack, Xử lý Quái
+-- Blox Fruits Halloween Event Auto Script - Phần 1 (Chỉ Đánh Thường)
+-- Tính năng: Auto Equip, Auto Click thường 100%, Anti-Giật Bay
 -- ==========================================================
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-local VirtualUser = game:GetService("VirtualUser")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local LocalPlayer = Players.LocalPlayer
-local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 
--- Cấu hình người dùng
+-- Cấu hình
 getgenv().AutoPumpkin = true
-getgenv().TweenSpeed = 350 -- Tốc độ bay (điều chỉnh tùy ý)
+getgenv().TweenSpeed = 280
 
-print("[Halloween Script] Đã khởi động Phần 1 thành công!")
+print("[Halloween Script] Đã chuyển sang chế độ chỉ Auto Đánh Thường (Không dùng Skill)!")
 
--- Hàm tìm kiếm Pumpkin gần nhất trong Workspace
+-- 1. Hàm tự động cầm Vũ khí trên tay (Melee / Sword)
+local function autoEquipWeapon()
+    pcall(function()
+        local char = LocalPlayer.Character
+        if not char then return end
+        
+        if not char:FindFirstChildOfClass("Tool") then
+            local backpack = LocalPlayer:FindFirstChild("Backpack")
+            if backpack then
+                for _, tool in pairs(backpack:GetChildren()) do
+                    if tool:IsA("Tool") and (tool.ToolTip == "Melee" or tool.ToolTip == "Sword" or tool.ToolTip == "Blox Fruit") then
+                        char.Humanoid:EquipTool(tool)
+                        break
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- 2. Hàm chỉ thực hiện đánh thường (Click chuột trái / Swing) liên tục
+local function autoBasicAttack()
+    pcall(function()
+        autoEquipWeapon()
+        
+        -- Dùng VirtualInputManager giả lập click chuột trái để đánh thường
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+        task.wait(0.02)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+    end)
+end
+
+-- 3. Hàm tìm Pumpkin gần nhất trong Workspace
 local function getNearestPumpkin()
     local nearest = nil
     local shortestDistance = math.huge
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
 
     for _, obj in pairs(Workspace:GetDescendants()) do
         if obj.Name:lower():find("pumpkin") or obj.Name:lower():find("candy") then
             local part = obj:IsA("Model") and obj.PrimaryPart or (obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart"))
             if part then
-                local dist = (HumanoidRootPart.Position - part.Position).Magnitude
+                local dist = (hrp.Position - part.Position).Magnitude
                 if dist < shortestDistance then
                     shortestDistance = dist
                     nearest = part
@@ -39,86 +70,37 @@ local function getNearestPumpkin()
     return nearest
 end
 
--- Hàm kiểm tra quái vật xuất hiện xung quanh
-local function checkNearbyMobs()
-    local enemiesFolder = Workspace:FindFirstChild("Enemies")
-    if not enemiesFolder then return nil end
-
-    for _, enemy in pairs(enemiesFolder:GetChildren()) do
-        local hrp = enemy:FindFirstChild("HumanoidRootPart")
-        local hum = enemy:FindFirstChild("Humanoid")
-        if hrp and hum and hum.Health > 0 then
-            local dist = (HumanoidRootPart.Position - hrp.Position).Magnitude
-            if dist < 25 then -- Phạm vi phát hiện quái đứng chờ/cản đường
-                return enemy
-            end
-        end
-    end
-    return nil
-end
-
--- Hàm gửi lệnh tấn công tự động (Không cần người chơi click chuột)
-local function autoAttack()
-    pcall(function()
-        local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-        if tool then
-            tool:Activate()
-        else
-            -- Kích hoạt tấn công cơ bản / combat nếu không cầm tool
-            VirtualUser:Button1Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-            task.wait(0.1)
-            VirtualUser:Button1Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-        end
-    end)
-end
-
--- Vòng lặp chính xử lý logic sự kiện
+-- 4. Vòng lặp chính xử lý Bay và Đánh thường
 task.spawn(function()
-    while task.wait(0.5) do
+    while task.wait(0.2) do
         if getgenv().AutoPumpkin then
             pcall(function()
-                Character = LocalPlayer.Character
-                if not Character or not Character:FindFirstChild("HumanoidRootPart") then return end
-                HumanoidRootPart = Character.HumanoidRootPart
+                local char = LocalPlayer.Character
+                if not char or not char:FindFirstChild("HumanoidRootPart") or not char:FindFirstChild("Humanoid") then return end
+                local hrp = char.HumanoidRootPart
 
-                -- 1. Ưu tiên xử lý nếu có quái xuất hiện gần đó
-                local mob = checkNearbyMobs()
-                if mob and mob:FindFirstChild("HumanoidRootPart") then
-                    local mobHrp = mob.HumanoidRootPart
-                    local distToMob = (HumanoidRootPart.Position - mobHrp.Position).Magnitude
-                    
-                    if distToMob > 10 then
-                        local tweenInfo = TweenInfo.new(distToMob / getgenv().TweenSpeed, Enum.EasingStyle.Linear)
-                        local tween = TweenService:Create(HumanoidRootPart, tweenInfo, {CFrame = mobHrp.CFrame * CFrame.new(0, 5, 5)})
-                        tween:Play()
-                        tween.Completed:Wait()
-                    end
-
-                    -- Đứng chờ và đánh liên tục cho đến khi quái chết
-                    while mob and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 and getgenv().AutoPumpkin do
-                        autoAttack()
-                        task.wait(0.2)
-                    end
-                end
-
-                -- 2. Tìm và bay đến Pumpkin
                 local pumpkin = getNearestPumpkin()
                 if pumpkin then
-                    local distance = (HumanoidRootPart.Position - pumpkin.Position).Magnitude
-                    local timeTravel = distance / getgenv().TweenSpeed
+                    local distance = (hrp.Position - pumpkin.Position).Magnitude
                     
-                    local tweenInfo = TweenInfo.new(timeTravel, Enum.EasingStyle.Linear)
-                    local tween = TweenService:Create(HumanoidRootPart, tweenInfo, {CFrame = pumpkin.CFrame + Vector3.new(0, 3, 0)})
-                    tween:Play()
-                    
-                    -- Theo dõi trong quá trình bay: nếu pumpkin biến mất hoặc bị người khác nhặt mất
-                    while tween.PlaybackState == Enum.PlaybackState.Playing do
-                        if not pumpkin.Parent or not pumpkin then
-                            tween:Cancel()
-                            print("[Halloween Script] Pumpkin đã biến mất, chuyển sang mục tiêu tiếp theo...")
-                            break
+                    -- Nếu ở xa -> Bay đến Pumpkin (với tốc độ chống giật)
+                    if distance > 8 then
+                        local timeTravel = distance / getgenv().TweenSpeed
+                        local tweenInfo = TweenInfo.new(timeTravel, Enum.EasingStyle.Linear)
+                        local tween = TweenService:Create(hrp, tweenInfo, {CFrame = pumpkin.CFrame * CFrame.new(0, 3, 0)})
+                        tween:Play()
+
+                        while tween.PlaybackState == Enum.PlaybackState.Playing do
+                            if not pumpkin.Parent or not pumpkin then
+                                tween:Cancel()
+                                break
+                            end
+                            task.wait(0.1)
                         end
-                        task.wait(0.1)
+                    else
+                        -- Đã tới nơi -> Giữ vị trí và liên tục thực hiện đánh thường
+                        hrp.CFrame = pumpkin.CFrame * CFrame.new(0, 3, 0)
+                        autoBasicAttack()
                     end
                 end
             end)
